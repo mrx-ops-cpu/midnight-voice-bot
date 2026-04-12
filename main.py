@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+from discord import app_commands
 from flask import Flask
 from threading import Thread
 import os
@@ -55,10 +56,23 @@ async def safe_join():
     except Exception as e:
         print(f"[-] Не вдалося зайти: {e}")
 
+# --- НОВА КОМАНДА ДЛЯ ЗНАЧКА РОЗРОБНИКА ---
+@bot.tree.command(name="midnight_ping", description="Перевірка для отримання значка Active Developer")
+async def midnight_ping(interaction: discord.Interaction):
+    await interaction.response.send_message(f"🌑 **Midnight Bot** онлайн! Перевірка активності пройдена.")
+
 @bot.event
 async def on_ready():
     print(f'[+] Авторизовано як: {bot.user.name}')
-    # Створюємо задачу на вхід окремо від основного потоку
+    
+    # Синхронізація слейш-команд
+    try:
+        synced = await bot.tree.sync()
+        print(f"[+] Синхронізовано {len(synced)} слейш-команд.")
+    except Exception as e:
+        print(f"[-] Помилка синхронізації команд: {e}")
+
+    # Створюємо задачу на вхід
     bot.loop.create_task(safe_join())
 
 @bot.event
