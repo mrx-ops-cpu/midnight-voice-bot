@@ -5,7 +5,7 @@ from threading import Thread
 import os
 import asyncio
 
-# 1. Веб-сервер для Railway
+# 1. Веб-сервер для Railway (щоб бот не засинав)
 app = Flask('')
 
 @app.route('/')
@@ -26,7 +26,7 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# ID твого каналу (той самий, що був у тебе)
+# ID твого каналу
 VOICE_ID = 1458906259922354277 
 
 @bot.event
@@ -35,28 +35,47 @@ async def on_ready():
     await join_voice()
 
 async def join_voice():
-    """Функція для входу в канал"""
+    """Безпечна функція входу в канал з перевірками"""
     channel = bot.get_channel(VOICE_ID)
-    if channel:
-        # Перевіряємо, чи ми вже не там
+    if not channel:
+        print(f"Помилка: Канал з ID {VOICE_ID} не знайдено.")
+        return
+
+    # Перевіряємо права бота на вхід
+    permissions = channel.permissions_for(channel.guild.me)
+    if not permissions.connect or not permissions.speak:
+        print(f"Помилка: У бота немає прав на вхід або розмови в каналі {channel.name}!")
+        return
+
+    try:
         voice_client = discord.utils.get(bot.voice_clients, guild=channel.guild)
         if not voice_client:
-            await channel.connect()
-            print(f'Бот зайшов у канал: {channel.name}')
+            await channel.connect(timeout=20.0, reconnect=True)
+            print(f'Бот успішно зайшов у канал: {channel.name}')
+    except Exception as e:
+        print(f"Не вдалося підключитися: {e}")
 
 @bot.event
 async def on_voice_state_update(member, before, after):
-    # Якщо цей "member" — наш бот
-    if member.id == bot.user.id:
-        # Якщо канал "після" порожній, значить бота від'єднали
-        if after.channel is None:
-            print("Мене кікнули! Повертаюся назад...")
-            await asyncio.sleep(1) # Невелика пауза, щоб Discord встиг оновити статус
-            await join_voice()
+    # Якщо бот помітив, що він більше не в каналі
+    if member.id == bot.user.id and after.channel is None:
+        print("Мене від'єднали. Чекаю 10 секунд перед повторним входом...")
+        
+        # БЕЗПЕЧНА ЗАЙТРИМКА
+        await asyncio.sleep(10) 
+        
+        await join_voice()
 
-# Запуск
+# Запуск веб-сервера
 keep_alive()
 
-# Використовуй токен зі змінних оточення або встав свій
+# Токен (Railway автоматично підтягне його, якщо він є у Variables)
 TOKEN = os.getenv("TOKEN") or "MTQ5MjY2MjU5NzM1NzQwNDIxMQ.GuWdHO.unpINiO1sHTWInyRrD83P2Dj4elDf-e0d9g1Fw"
-bot.run(TOKEN)
+
+try:
+    bot.run(TOKEN)
+except discord.errors.HTTPException as e:
+    if e.status == 429:
+        print("КРИТИЧНО: Discord заблокував запити (Rate Limit). Потрібно вимкнути бота на 30-60 хв!")
+    else:
+        raise e
