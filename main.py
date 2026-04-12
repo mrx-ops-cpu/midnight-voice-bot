@@ -5,7 +5,7 @@ from threading import Thread
 import os
 import asyncio
 
-# 1. Веб-сервер для Railway (щоб бот не засинав)
+# 1. Веб-сервер (щоб Railway не "гасив" бота)
 app = Flask('')
 
 @app.route('/')
@@ -19,9 +19,10 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# 2. Налаштування бота
+# 2. Налаштування
 intents = discord.Intents.default()
 intents.voice_states = True
+intents.guilds = True
 intents.message_content = True 
 
 bot = commands.Bot(command_prefix='!', intents=intents)
@@ -29,53 +30,52 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 # ID твого каналу
 VOICE_ID = 1458906259922354277 
 
-@bot.event
-async def on_ready():
-    print(f'Авторизовано як: {bot.user.name}')
-    await join_voice()
-
-async def join_voice():
-    """Безпечна функція входу в канал з перевірками"""
+async def safe_join():
+    """Функція безпечного входу з перевірками"""
+    await bot.wait_until_ready()
     channel = bot.get_channel(VOICE_ID)
+    
     if not channel:
-        print(f"Помилка: Канал з ID {VOICE_ID} не знайдено.")
+        print(f"[-] Канал {VOICE_ID} не знайдено. Перевір ID!")
         return
 
-    # Перевіряємо права бота на вхід
-    permissions = channel.permissions_for(channel.guild.me)
-    if not permissions.connect or not permissions.speak:
-        print(f"Помилка: У бота немає прав на вхід або розмови в каналі {channel.name}!")
+    # Перевіряємо, чи ми вже не підключені до цього сервера
+    voice = discord.utils.get(bot.voice_clients, guild=channel.guild)
+    
+    if voice and voice.is_connected():
+        print(f"[!] Бот уже в каналі {channel.name}, повторний вхід не потрібен.")
         return
 
     try:
-        voice_client = discord.utils.get(bot.voice_clients, guild=channel.guild)
-        if not voice_client:
-            await channel.connect(timeout=20.0, reconnect=True)
-            print(f'Бот успішно зайшов у канал: {channel.name}')
+        print(f"[*] Спроба зайти в канал {channel.name}...")
+        await channel.connect(timeout=20.0, reconnect=True)
+        print(f"[+] Успішно підключено!")
     except Exception as e:
-        print(f"Не вдалося підключитися: {e}")
+        print(f"[-] Помилка при вході: {e}")
+
+@bot.event
+async def on_ready():
+    print(f'[+] Бот авторизований як: {bot.user.name}')
+    # Запускаємо вхід як окрему задачу, щоб не блокувати бота
+    bot.loop.create_task(safe_join())
 
 @bot.event
 async def on_voice_state_update(member, before, after):
-    # Якщо бот помітив, що він більше не в каналі
-    if member.id == bot.user.id and after.channel is None:
-        print("Мене від'єднали. Чекаю 10 секунд перед повторним входом...")
-        
-        # БЕЗПЕЧНА ЗАЙТРИМКА
-        await asyncio.sleep(10) 
-        
-        await join_voice()
+    # Якщо хтось (або помилка) викинули саме нашого бота
+    if member.id == bot.user.id and before.channel is not None and after.channel is None:
+        print("[!] Мене від'єднали! Чекаю 10 секунд для безпеки...")
+        await asyncio.sleep(10)
+        await safe_join()
 
-# Запуск веб-сервера
+# Запуск
 keep_alive()
 
-# Токен (Railway автоматично підтягне його, якщо він є у Variables)
 TOKEN = os.getenv("TOKEN") or "MTQ5MjY2MjU5NzM1NzQwNDIxMQ.GuWdHO.unpINiO1sHTWInyRrD83P2Dj4elDf-e0d9g1Fw"
 
 try:
     bot.run(TOKEN)
 except discord.errors.HTTPException as e:
     if e.status == 429:
-        print("КРИТИЧНО: Discord заблокував запити (Rate Limit). Потрібно вимкнути бота на 30-60 хв!")
+        print("!!! КРИТИЧНО: Discord заблокував IP (Rate Limit). ВИМКНИ БОТА НА 30 ХВИЛИН !!!")
     else:
-        raise e
+        print(f"Помилка HTTP: {e}")
