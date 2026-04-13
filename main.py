@@ -19,38 +19,44 @@ def run():
 def keep_alive():
     t = Thread(target=run, daemon=True); t.start()
 
-# --- 2. НАЛАШТУВАННЯ ТА ПРАПОРЦІ ---
-intents = discord.Intents.all()
-bot = commands.Bot(command_prefix='!', intents=intents)
-
-# Глобальні статуси
-CONFIG = {
-    "monitoring": True,
-    "voice": True,
-    "version": "v1.8",
-    "image_url": "https://i.imgur.com/Ваша_Картинка.png" # Заміни на реальне посилання
+# --- 2. ГОЛОВНІ НАЛАШТУВАННЯ (TRUE/FALSE) ---
+# Змінюй ці значення тут, щоб увімкнути/вимкнути функції за замовчуванням
+GLOBAL_SETTINGS = {
+    "monitoring": True,   # Моніторинг ігор та створення гілок у форумі
+    "voice_guard": True,  # Цілодобове перебування у голосовому каналі
+    "auto_reconnect": True # Автоматичне повернення, якщо бота вигнали
 }
+
+BOT_VERSION = "v1.9"
+# Сюди встав посилання на картинку MN (з Discord або хостингу)
+IMAGE_URL = "https://i.imgur.com/Ваша_Картинка.png" 
 
 VOICE_ID = 1458906259922354277 
 GAMING_LOG_ID = 1493054931224105070 
 
-# --- 3. ЛОГІКА ГОЛОСУ ---
+# --- 3. ІНІЦІАЛІЗАЦІЯ БОТА ---
+intents = discord.Intents.all()
+bot = commands.Bot(command_prefix='!', intents=intents)
+
+# --- 4. ЛОГІКА ГОЛОСУ ---
 async def safe_join():
-    if not CONFIG["voice"]: return
+    if not GLOBAL_SETTINGS["voice_guard"]: return
     try:
         await bot.wait_until_ready()
         channel = bot.get_channel(VOICE_ID)
         if not channel: return
         
+        # Перевірка поточного підключення
         vc = discord.utils.get(bot.voice_clients, guild=channel.guild)
         if not vc or not vc.is_connected():
-            await channel.connect(reconnect=True)
+            await channel.connect(reconnect=True, timeout=20)
+            print(f"[+] Midnight зайшов у канал")
     except Exception as e:
-        print(f"[-] Помилка голосу: {e}")
+        print(f"[-] Помилка входу: {e}")
 
-# --- 4. КОМАНДИ (STYLISH) ---
+# --- 5. СТИЛЬНІ СЛЕШ-КОМАНДИ ---
 
-@bot.tree.command(name="midnight_info", description="Системна інформація бота")
+@bot.tree.command(name="midnight_info", description="Показати статус систем")
 async def midnight_info(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🌑 Midnight Bot | System Info",
@@ -58,68 +64,64 @@ async def midnight_info(interaction: discord.Interaction):
         color=0x2b2d31
     )
     
-    # Моніторинг ігор
-    m_emoji = "🟢 Увімкнено" if CONFIG["monitoring"] else "🔴 Вимкнено"
+    # Стан моніторингу
+    m_status = "🟢 Увімкнено" if GLOBAL_SETTINGS["monitoring"] else "🔴 Вимкнено"
     embed.add_field(
         name="🎮 Моніторинг ігор",
-        value=f"Сповіщає про збори на катку.\n**Статус:** {m_emoji}",
+        value=f"Сповіщає про збори на катку.\n**Статус:** {m_status}",
         inline=False
     )
     
-    # Voice Guardian
-    v_emoji = "🟢 Активний" if CONFIG["voice"] else "🔴 Неактивний"
+    # Стан Voice Guardian
+    v_status = "🟢 Активний" if GLOBAL_SETTINGS["voice_guard"] else "🔴 Неактивний"
     embed.add_field(
         name="🎙️ Voice Guardian",
-        value=f"Цілодобова присутність у голосовому каналі.\n**Статус:** {v_emoji}",
+        value=f"Цілодобова присутність у голосовому каналі.\n**Статус:** {v_status}",
         inline=False
     )
     
-    # Керування
     embed.add_field(
-        name="🛠️ Керування",
-        value=(
-            "`/gaming_status` — змінити статус моніторингу.\n"
-            "`/voice_status` — змінити статус присутності.\n"
-            "`/midnight_ping` — затримка мережі."
-        ),
+        name="🛠️ Керування (Перемикачі)",
+        value="`/toggle_monitoring` — змінити стан ігор\n`/toggle_voice` — змінити стан войсу",
         inline=False
     )
     
-    embed.set_thumbnail(url=CONFIG["image_url"])
-    embed.set_footer(text=f"Midnight Bot {CONFIG['version']} | Стан: Стабільний")
-    
+    if IMAGE_URL.startswith("http"):
+        embed.set_thumbnail(url=IMAGE_URL)
+        
+    embed.set_footer(text=f"Midnight Bot {BOT_VERSION} | Стан: Стабільний")
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="gaming_status", description="Увімкнути/Вимкнути моніторинг")
-async def gaming_status(interaction: discord.Interaction):
-    CONFIG["monitoring"] = not CONFIG["monitoring"]
-    state = "активовано" if CONFIG["monitoring"] else "деактивовано"
-    await interaction.response.send_message(f"✅ Моніторинг ігор **{state}**.", ephemeral=True)
+@bot.tree.command(name="toggle_monitoring", description="Увімкнути/Вимкнути лог ігор")
+async def toggle_monitoring(interaction: discord.Interaction):
+    GLOBAL_SETTINGS["monitoring"] = not GLOBAL_SETTINGS["monitoring"]
+    state = "УВІМКНЕНО" if GLOBAL_SETTINGS["monitoring"] else "ВИМКНЕНО"
+    await interaction.response.send_message(f"📡 Модуль моніторингу тепер **{state}**.", ephemeral=True)
 
-@bot.tree.command(name="voice_status", description="Увімкнути/Вимкнути присутність у войсі")
-async def voice_status(interaction: discord.Interaction):
-    CONFIG["voice"] = not CONFIG["voice"]
-    if not CONFIG["voice"]:
-        for vc in bot.voice_clients: await vc.disconnect()
+@bot.tree.command(name="toggle_voice", description="Увімкнути/Вимкнути Voice Guardian")
+async def toggle_voice(interaction: discord.Interaction):
+    GLOBAL_SETTINGS["voice_guard"] = not GLOBAL_SETTINGS["voice_guard"]
+    state = "АКТИВОВАНО" if GLOBAL_SETTINGS["voice_guard"] else "ДЕАКТИВОВАНО"
+    
+    if not GLOBAL_SETTINGS["voice_guard"]:
+        for vc in bot.voice_clients: await vc.disconnect(force=True)
     else:
         await safe_join()
-    await interaction.response.send_message(f"✅ Voice Guardian **{'увімкнено' if CONFIG['voice'] else 'вимкнено'}**.", ephemeral=True)
+        
+    await interaction.response.send_message(f"🎙️ Voice Guardian тепер **{state}**.", ephemeral=True)
 
-@bot.tree.command(name="midnight_ping", description="Перевірити пінг")
-async def midnight_ping(interaction: discord.Interaction):
-    await interaction.response.send_message(f"📡 Затримка мережі: **{round(bot.latency * 1000)}ms**", ephemeral=True)
-
-# --- 5. ПОДІЇ ---
+# --- 6. ОБРОБКА ПОДІЙ ---
 
 @bot.event
 async def on_presence_update(before, after):
-    if not CONFIG["monitoring"]: return
+    if not GLOBAL_SETTINGS["monitoring"]: return
     if before.activity == after.activity: return
     
     if after.activity and after.activity.type == discord.ActivityType.playing:
         game_name = after.activity.name
         channel = bot.get_channel(GAMING_LOG_ID)
         
+        # Логіка паті: шукаємо інших гравців у ту саму гру
         players = [m.display_name for m in after.guild.members 
                    if m.id != after.id and any(act.name == game_name for act in m.activities if act.type == discord.ActivityType.playing)]
         
@@ -134,16 +136,23 @@ async def on_presence_update(before, after):
 
 @bot.event
 async def on_voice_state_update(member, before, after):
-    if member.id == bot.user.id and before.channel and not after.channel and CONFIG["voice"]:
-        await asyncio.sleep(5)
-        await safe_join()
+    # Якщо бота вибили, а Voice Guardian увімкнено — повертаємося
+    if member.id == bot.user.id and before.channel and not after.channel:
+        if GLOBAL_SETTINGS["voice_guard"] and GLOBAL_SETTINGS["auto_reconnect"]:
+            print("[!] Виявлено відключення. Перезапуск Voice Guardian...")
+            await asyncio.sleep(5)
+            await safe_join()
 
 @bot.event
 async def on_ready():
-    print(f'[+] Midnight {CONFIG["version"]} завантажено!')
+    print(f'--- MIDNIGHT SYSTEM {BOT_VERSION} ---')
+    print(f'[+] Бот: {bot.user.name}')
+    print(f'[+] Моніторинг: {GLOBAL_SETTINGS["monitoring"]}')
+    print(f'[+] Voice Guardian: {GLOBAL_SETTINGS["voice_guard"]}')
     await bot.tree.sync()
     asyncio.create_task(safe_join())
 
 if __name__ == "__main__":
     keep_alive()
-    bot.run("ТВІЙ_ТОКЕН")
+    # Встав свій токен нижче
+    bot.run("MTQ5MjY2MjU5NzM1NzQwNDIxMQ.GNy4wE.3L7h8eWVa2ZLCQwmKwikaBTPuvOm6denfCRcMI")
