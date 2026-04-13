@@ -6,7 +6,7 @@ import os
 import asyncio
 import random
 
-# --- 1. ВЕБ-СЕРВЕР ДЛЯ RAILWAY ---
+# --- 1. ВЕБ-СЕРВЕР ДЛЯ ПІДТРИМКИ ОНЛАЙНУ ---
 app = Flask('')
 @app.route('/')
 def home(): return "MIDNIGHT SYSTEM ONLINE"
@@ -19,80 +19,85 @@ def keep_alive():
     t = Thread(target=run, daemon=True); t.start()
 
 # --- 2. НАЛАШТУВАННЯ БОТА ---
-# Використовуємо Intents.all(), щоб точно бачити статуси ігор та список учасників
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# ID твого форуму або текстового каналу
+# Твої ID
+VOICE_ID = 1458906259922354277 
 GAMING_LOG_ID = 1493054931224105070 
 
-# --- 3. МОНІТОРИНГ ІГОР ТА ФОРУМ ---
+# --- 3. ФУНКЦІЯ АВТО-ПІДКЛЮЧЕННЯ В ГОЛОС ---
+async def safe_join():
+    try:
+        await bot.wait_until_ready()
+        await asyncio.sleep(5) # Пауза для стабілізації з'єднання Railway
+        
+        channel = bot.get_channel(VOICE_ID)
+        if not channel:
+            print(f"[-] Канал {VOICE_ID} не знайдено!")
+            return
+
+        # Перевіряємо, чи ми вже в каналі
+        guild = channel.guild
+        vc = discord.utils.get(bot.voice_clients, guild=guild)
+
+        if vc and vc.is_connected():
+            if vc.channel.id == VOICE_ID:
+                return # Вже на місці
+            await vc.disconnect(force=True)
+
+        await channel.connect(reconnect=True, timeout=30)
+        print(f"[+] MIDNIGHT зайняв пост у каналі: {channel.name}")
+    except Exception as e:
+        print(f"[-] Помилка авто-входу: {e}")
+
+# --- 4. МОНІТОРИНГ ІГОР ТА ФОРУМ ---
 @bot.event
 async def on_presence_update(before, after):
-    # Перевіряємо, чи змінилася саме активність (гра)
     if before.activity == after.activity: return
     
-    # Якщо користувач почав грати
     if after.activity and after.activity.type == discord.ActivityType.playing:
         game_name = after.activity.name
         channel = bot.get_channel(GAMING_LOG_ID)
+        if not channel: return
         
-        if not channel:
-            print(f"[-] Канал {GAMING_LOG_ID} не знайдено!")
-            return
+        players = [m.display_name for m in after.guild.members 
+                   if m.id != after.id and any(act.name == game_name for act in m.activities if act.type == discord.ActivityType.playing)]
         
-        # Шукаємо, хто ще з учасників зараз грає в ту саму гру
-        other_players = [
-            m.display_name for m in after.guild.members 
-            if m.id != after.id and any(
-                act.name == game_name for act in m.activities 
-                if act.type == discord.ActivityType.playing
-            )
-        ]
-        
-        # Якщо знайшли компанію (мінімум двоє грають в одне і те ж)
-        if other_players:
-            greetings = [
-                "Бачу, тут намічається серйозна катка!", 
-                "О, вже збирається непогане паті!", 
-                "Виявлено активність у мережі.",
-                "Вдалого полювання, сталкери!"
-            ]
+        # Створюємо лог, якщо в гру грає більше однієї людини
+        if players:
+            greetings = ["Нова катка!", "Паті збирається!", "Виявлено активність!", "Вдалого полювання!"]
+            content = f"🎮 **{random.choice(greetings)}**\nГравці: {', '.join(players + [after.display_name])}\nГра: **{game_name}**"
             
-            all_players = other_players + [after.display_name]
-            content = f"🎮 **{random.choice(greetings)}**\n\n**Гравці:** {', '.join(all_players)}\n**Гра:** {game_name}"
-            
-            try:
-                # ЛОГІКА ФОРУМУ: якщо це форум, створюємо нову гілку (Thread)
-                if isinstance(channel, discord.ForumChannel):
-                    # Перевіряємо, чи вже є відкрита гілка з такою назвою, щоб не спамити
-                    await channel.create_thread(name=f"🎮 {game_name}", content=content)
-                    print(f"[+] Створено гілку форуму для {game_name}")
-                else:
-                    # Якщо це звичайний текстовий канал — просто надсилаємо повідомлення
-                    await channel.send(content)
-                    print(f"[+] Надіслано лог гри у текстовий канал")
-            except Exception as e:
-                print(f"[-] Помилка при створенні гілки/повідомлення: {e}")
+            if isinstance(channel, discord.ForumChannel):
+                await channel.create_thread(name=f"🎮 {game_name}", content=content)
+            else:
+                await channel.send(content)
 
-# --- 4. КОМАНДА СТАТУСУ ---
-@bot.tree.command(name="midnight_info", description="Перевірити стан систем")
-async def midnight_info(interaction: discord.Interaction):
-    embed = discord.Embed(title="🌑 Midnight System Control", color=0x2f3136)
-    embed.add_field(name="🌐 Сервер", value="✅ Railway Online", inline=True)
-    embed.add_field(name="📊 Моніторинг", value="✅ Active", inline=True)
-    embed.set_footer(text="Система готова до роботи")
+# --- 5. КОНТРОЛЬ ПРИСУТНОСТІ В ГОЛОСІ ---
+@bot.event
+async def on_voice_state_update(member, before, after):
+    # Якщо хтось вимкнув бота або він сам вилетів
+    if member.id == bot.user.id and before.channel and not after.channel:
+        print("[!] Бот був відключений. Повертаюсь на пост через 5 секунд...")
+        await asyncio.sleep(5)
+        await safe_join()
+
+# --- 6. СТАРТ ТА КОМАНДИ ---
+@bot.tree.command(name="status", description="Статус систем Midnight")
+async def status(interaction: discord.Interaction):
+    embed = discord.Embed(title="🌑 Midnight Control Panel", color=0x2f3136)
+    embed.add_field(name="🌐 Мережа", value="✅ Online", inline=True)
+    embed.add_field(name="🎮 Форум", value="✅ Active", inline=True)
+    embed.add_field(name="🎙️ Голос", value="✅ Connected", inline=True)
     await interaction.response.send_message(embed=embed)
 
 @bot.event
 async def on_ready():
-    print(f'---')
-    print(f'[+] {bot.user.name} успішно активований!')
-    print(f'[+] Моніторинг форуму: УВІМКНЕНО')
-    print(f'---')
+    print(f'[+] {bot.user.name} активований!')
     await bot.tree.sync()
+    asyncio.create_task(safe_join())
 
 if __name__ == "__main__":
     keep_alive()
-    # Встав свій токен сюди
     bot.run("MTQ5MjY2MjU5NzM1NzQwNDIxMQ.GNy4wE.3L7h8eWVa2ZLCQwmKwikaBTPuvOm6denfCRcMI")
