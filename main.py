@@ -40,7 +40,7 @@ async def safe_join():
             await vc.disconnect(force=True)
         await asyncio.sleep(2)
         await channel.connect(reconnect=True, timeout=60, self_deaf=False)
-        print(f"[+] Бот зайняв позицію")
+        print(f"[+] Бот у каналі: {channel.name}")
     except Exception as e:
         print(f"[-] Помилка входу: {e}")
 
@@ -59,21 +59,21 @@ async def on_voice_state_update(member, before, after):
                 try:
                     if vc.is_playing(): vc.stop()
                     
-                    # ШУКАЄМО FFmpeg АВТОМАТИЧНО
-                    ffmpeg_path = shutil.which("ffmpeg")
-                    if not ffmpeg_path:
-                        print("[-] FFmpeg все ще не знайдено в системі!")
+                    # ШУКАЄМО FFmpeg
+                    exe_path = shutil.which("ffmpeg")
+                    if not exe_path:
+                        print("[-] FFmpeg не знайдено! Перевір Variables на Railway.")
                         return
 
                     source = discord.FFmpegPCMAudio(
                         "welcome.mp3", 
-                        executable=ffmpeg_path,
+                        executable=exe_path,
                         before_options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
                     )
                     vc.play(source)
                     print(f"[!] ЗВУК ПІШОВ: {member.display_name}")
                 except Exception as e:
-                    print(f"[-] Помилка: {e}")
+                    print(f"[-] Помилка аудіо: {e}")
 
 # --- 5. МОНІТОРИНГ ІГОР ---
 @bot.event
@@ -86,16 +86,18 @@ async def on_presence_update(before, after):
         players = [m.display_name for m in after.guild.members 
                    if m.id != after.id and any(act.name == game_name for act in m.activities if act.type == discord.ActivityType.playing)]
         if players:
-            content = f"🎮 **Нова катка!**\nГравці: {', '.join(players + [after.display_name])}\nГра: {game_name}"
-            if isinstance(channel, discord.ForumChannel): await channel.create_thread(name=f"🎮 {game_name}", content=content)
-            else: await channel.send(content)
+            greetings = ["Бачу серйозну катку!", "О, паті збирається!", "Вдалого полювання!"]
+            content = f"🎮 **{random.choice(greetings)}**\nГравці: {', '.join(players + [after.display_name])}\nГра: {game_name}"
+            if isinstance(channel, discord.ForumChannel):
+                await channel.create_thread(name=f"🎮 {game_name}", content=content)
+            else:
+                await channel.send(content)
 
 # --- 6. КОМАНДИ ---
-@bot.tree.command(name="voice_status", description="Звук")
-async def voice_status(interaction: discord.Interaction, status: bool):
-    global voice_welcome_enabled
-    voice_welcome_enabled = status
-    await interaction.response.send_message(f"Голос: {'ВКЛ' if status else 'ВИКЛ'}")
+@bot.tree.command(name="midnight_info", description="Статус")
+async def midnight_info(interaction: discord.Interaction):
+    v = "✅" if voice_welcome_enabled else "❌"
+    await interaction.response.send_message(f"🌑 **Midnight Info**\nГолос: {v}")
 
 @bot.event
 async def on_ready():
