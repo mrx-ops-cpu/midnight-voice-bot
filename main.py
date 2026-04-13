@@ -24,7 +24,8 @@ GLOBAL_SETTINGS = {
     "monitoring": True,   # Моніторинг ігор (Форум)
     "voice_guard": True,  # Присутність у войсі
     "version": "v2.0",
-    "image_url": "https://i.imgur.com/2A4x9E6.png" # ОНОВЛЕНО: Логотип MN
+    # ТВОЯ НОВА СИЛКА НА КАРТИНКУ ТУТ:
+    "image_url": "https://cdn.discordapp.com/avatars/1492662597357404211/a_4bf48afaac3798695e46c007ce568803.gif?size=1024"
 }
 
 VOICE_ID = 1458906259922354277 
@@ -158,5 +159,4 @@ async def on_ready():
 
 if __name__ == "__main__":
     keep_alive()
-    # Твій токен
     bot.run("MTQ5MjY2MjU5NzM1NzQwNDIxMQ.GNy4wE.3L7h8eWVa2ZLCQwmKwikaBTPuvOm6denfCRcMI")
