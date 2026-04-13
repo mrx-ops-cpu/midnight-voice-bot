@@ -21,12 +21,14 @@ def keep_alive():
 
 # --- 2. ГОЛОВНІ НАЛАШТУВАННЯ ---
 GLOBAL_SETTINGS = {
-    "monitoring": True,   # Моніторинг ігор (Форум)
-    "voice_guard": True,  # Присутність у войсі
-    "version": "v2.0",
-    # ТВОЯ НОВА СИЛКА НА КАРТИНКУ ТУТ:
+    "monitoring": True,   
+    "voice_guard": True,  
+    "version": "v2.1",
     "image_url": "https://cdn.discordapp.com/avatars/1492662597357404211/a_4bf48afaac3798695e46c007ce568803.gif?size=1024"
 }
+
+# Словник для збереження часу останнього повідомлення по кожній грі
+game_cooldowns = {} 
 
 VOICE_ID = 1458906259922354277 
 GAMING_LOG_ID = 1493054931224105070 
@@ -49,7 +51,7 @@ async def safe_join():
     except Exception as e:
         print(f"[-] Помилка входу: {e}")
 
-# --- 4. КОМАНДИ З ВИБОРОМ (TRUE/FALSE) ---
+# --- 4. КОМАНДИ КЕРУВАННЯ ---
 
 @bot.tree.command(name="midnight_info", description="Системна інформація бота")
 async def midnight_info(interaction: discord.Interaction):
@@ -60,67 +62,40 @@ async def midnight_info(interaction: discord.Interaction):
     )
     
     m_status = "🟢 Увімкнено" if GLOBAL_SETTINGS["monitoring"] else "🔴 Вимкнено"
-    embed.add_field(
-        name="🎮 Моніторинг ігор",
-        value=f"Сповіщає про збори на катку.\n**Статус:** {m_status}",
-        inline=False
-    )
+    embed.add_field(name="🎮 Моніторинг ігор", value=f"**Статус:** {m_status}", inline=False)
     
     v_status = "🟢 Активний" if GLOBAL_SETTINGS["voice_guard"] else "🔴 Неактивний"
-    embed.add_field(
-        name="🎙️ Voice Guardian",
-        value=f"Цілодобова присутність у голосовому каналі.\n**Статус:** {v_status}",
-        inline=False
-    )
+    embed.add_field(name="🎙️ Voice Guardian", value=f"**Статус:** {v_status}", inline=False)
     
-    embed.add_field(
-        name="🛠️ Керування",
-        value="`/set_monitoring` — змінити статус ігор\n`/set_voice` — змінити статус войсу\n`/midnight_ping` — пінг мережі",
-        inline=False
-    )
-    
-    if GLOBAL_SETTINGS["image_url"].startswith("http"):
-        embed.set_thumbnail(url=GLOBAL_SETTINGS["image_url"])
-        
+    embed.set_thumbnail(url=GLOBAL_SETTINGS["image_url"])
     embed.set_footer(text=f"Midnight Bot {GLOBAL_SETTINGS['version']} | Стан: Стабільний")
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="set_monitoring", description="Встановити статус моніторингу ігор")
-@app_commands.describe(стан="Виберіть стан: True (Увімкнено) або False (Вимкнено)")
+@bot.tree.command(name="set_monitoring", description="Встановити статус моніторингу")
+@app_commands.describe(стан="Увімкнути або Вимкнути")
 @app_commands.choices(стан=[
     app_commands.Choice(name="True (Увімкнути)", value="true"),
     app_commands.Choice(name="False (Вимкнути)", value="false")
 ])
 async def set_monitoring(interaction: discord.Interaction, стан: app_commands.Choice[str]):
-    new_state = стан.value == "true"
-    GLOBAL_SETTINGS["monitoring"] = new_state
-    emoji = "🟢" if new_state else "🔴"
-    await interaction.response.send_message(f"{emoji} Моніторинг ігор тепер: **{new_state}**.", ephemeral=True)
+    GLOBAL_SETTINGS["monitoring"] = (стан.value == "true")
+    await interaction.response.send_message(f"📡 Моніторинг: **{GLOBAL_SETTINGS['monitoring']}**", ephemeral=True)
 
 @bot.tree.command(name="set_voice", description="Встановити статус Voice Guardian")
-@app_commands.describe(стан="Виберіть стан: True або False")
+@app_commands.describe(стан="Увімкнути або Вимкнути")
 @app_commands.choices(стан=[
     app_commands.Choice(name="True (Активувати)", value="true"),
     app_commands.Choice(name="False (Деактивувати)", value="false")
 ])
 async def set_voice(interaction: discord.Interaction, стан: app_commands.Choice[str]):
-    new_state = стан.value == "true"
-    GLOBAL_SETTINGS["voice_guard"] = new_state
-    
-    if not new_state:
+    GLOBAL_SETTINGS["voice_guard"] = (стан.value == "true")
+    if not GLOBAL_SETTINGS["voice_guard"]:
         for vc in bot.voice_clients: await vc.disconnect(force=True)
-        msg = "🔴 Voice Guardian вимкнено."
     else:
         await safe_join()
-        msg = "🟢 Voice Guardian увімкнено."
-        
-    await interaction.response.send_message(msg, ephemeral=True)
+    await interaction.response.send_message(f"🎙️ Voice Guardian: **{GLOBAL_SETTINGS['voice_guard']}**", ephemeral=True)
 
-@bot.tree.command(name="midnight_ping", description="Перевірити затримку")
-async def midnight_ping(interaction: discord.Interaction):
-    await interaction.response.send_message(f"📡 Затримка: **{round(bot.latency * 1000)}ms**", ephemeral=True)
-
-# --- 5. ОБРОБКА ПОДІЙ ---
+# --- 5. ОБРОБКА ПОДІЙ (МОНІТОРИНГ З КУЛДАУНОМ 1 ГОДИНА) ---
 
 @bot.event
 async def on_presence_update(before, after):
@@ -129,12 +104,23 @@ async def on_presence_update(before, after):
     
     if after.activity and after.activity.type == discord.ActivityType.playing:
         game_name = after.activity.name
+        current_time = asyncio.get_event_loop().time()
+        
+        # --- ПЕРЕВІРКА КУЛДАУНУ (3600 секунд = 1 година) ---
+        last_announced = game_cooldowns.get(game_name, 0)
+        if current_time - last_announced < 3600:
+            return # Ще не пройшла година, виходимо
+            
         channel = bot.get_channel(GAMING_LOG_ID)
+        if not channel: return
         
         players = [m.display_name for m in after.guild.members 
                    if m.id != after.id and any(act.name == game_name for act in m.activities if act.type == discord.ActivityType.playing)]
         
         if players:
+            # Оновлюємо час останнього анонсу
+            game_cooldowns[game_name] = current_time
+            
             greetings = ["О, вже збирається непогане паті!", "Бачу, тут намічається катка!", "Вдалого полювання!"]
             all_players = players + [after.display_name]
             content = f"🎮 **{random.choice(greetings)}**\n**Гравці:** {', '.join(all_players)}\n**Гра:** {game_name}"
@@ -153,7 +139,7 @@ async def on_voice_state_update(member, before, after):
 
 @bot.event
 async def on_ready():
-    print(f'--- Midnight {GLOBAL_SETTINGS["version"]} ONLINE ---')
+    print(f'--- Midnight {GLOBAL_SETTINGS["version"]} ONLINE (Anti-Spam 1h) ---')
     await bot.tree.sync()
     asyncio.create_task(safe_join())
 
