@@ -1,4 +1,4 @@
 discord.py[voice]
-PyNaCl
+PyNaCl==1.5.0
 flask
 audioop-lts
