@@ -1,0 +1,11 @@
+[build]
+builder = "NIXPACKS"
+
+[phases.setup]
+nixPkgs = ["python313", "ffmpeg"]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
+
+[deploy]
+startCommand = "python main.py"
