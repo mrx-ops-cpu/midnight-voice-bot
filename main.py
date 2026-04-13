@@ -42,7 +42,7 @@ async def safe_join():
         if not channel: return
         voice = discord.utils.get(bot.voice_clients, guild=channel.guild)
         if voice and voice.is_connected(): return
-        await channel.connect(timeout=20.0, reconnect=True, self_deaf=True)
+        await channel.connect(timeout=20.0, reconnect=True, self_deaf=False)
         print(f"[+] Бот зайшов у войс: {channel.name}")
     except Exception as e: print(f"Voice Error: {e}")
 
