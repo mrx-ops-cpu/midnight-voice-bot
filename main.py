@@ -23,13 +23,13 @@ def keep_alive():
 GLOBAL_SETTINGS = {
     "monitoring": True,   
     "voice_guard": True,  
-    "version": "v2.3",
+    "version": "v2.4",
     "image_url": "https://cdn.discordapp.com/avatars/1492662597357404211/a_4bf48afaac3798695e46c007ce568803.gif?size=1024"
 }
 
-# Зберігаємо ID гравців, які вже анонсовані в поточній сесії
-# Структура: { "Назва гри": [ID1, ID2, ID3] }
 active_sessions = {}
+# Об'єкт для блокування паралельних запитів
+creation_locks = {}
 
 VOICE_ID = 1458906259922354277 
 GAMING_LOG_ID = 1493054931224105070 
@@ -49,7 +49,7 @@ async def safe_join():
             await channel.connect(reconnect=True, timeout=20)
     except Exception: pass
 
-# --- 4. КОМАНДИ ---
+# --- 4. КОМАНДИ КЕРУВАННЯ ---
 
 @bot.tree.command(name="midnight_info", description="Системна інформація бота")
 async def midnight_info(interaction: discord.Interaction):
@@ -58,9 +58,9 @@ async def midnight_info(interaction: discord.Interaction):
     v_status = "🟢 Активний" if GLOBAL_SETTINGS["voice_guard"] else "🔴 Неактивний"
     embed.add_field(name="🎮 Моніторинг ігор", value=f"Статус: {m_status}", inline=False)
     embed.add_field(name="🎙️ Voice Guardian", value=f"Статус: {v_status}", inline=False)
-    embed.add_field(name="🛠️ Керування", value="`/set_monitoring`, `/set_voice`, `/midnight_ping`")
+    embed.add_field(name="🛠️ Керування", value="`/set_monitoring`, `/set_voice`, `/midnight_ping`", inline=False)
     embed.set_thumbnail(url=GLOBAL_SETTINGS["image_url"])
-    embed.set_footer(text=f"Midnight Bot {GLOBAL_SETTINGS['version']}")
+    embed.set_footer(text=f"Midnight Bot {GLOBAL_SETTINGS['version']} | Стан: Стабільний")
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="set_monitoring")
@@ -82,55 +82,58 @@ async def set_voice(interaction: discord.Interaction, стан: app_commands.Cho
 async def midnight_ping(interaction: discord.Interaction):
     await interaction.response.send_message(f"📡 {round(bot.latency * 1000)}ms", ephemeral=True)
 
-# --- 5. ФІКС СПАМУ (SESSION CONTROL V2) ---
+# --- 5. ФІКС СПАМУ (SESSION CONTROL + LOCKS) ---
 
 @bot.event
 async def on_presence_update(before, after):
     if not GLOBAL_SETTINGS["monitoring"]: return
     
-    # Перевіряємо, чи користувач САМЕ ЗАРАЗ почав грати
-    was_playing = before.activity and before.activity.type == discord.ActivityType.playing
+    # Регулюємо вхід у гру
     is_playing = after.activity and after.activity.type == discord.ActivityType.playing
+    was_playing = before.activity and before.activity.type == discord.ActivityType.playing
     
     if is_playing and not was_playing:
         game_name = after.activity.name
         guild = after.guild
-        
-        # Очищуємо сесію, якщо в ній нікого не залишилося
-        if game_name in active_sessions:
-            still_online = []
-            for p_id in active_sessions[game_name]:
-                m = guild.get_member(p_id)
-                if m and m.activity and m.activity.name == game_name:
-                    still_online.append(p_id)
-            
-            if still_online:
-                # Якщо в цій грі ще є люди з минулого анонсу — нічого не пишемо
-                active_sessions[game_name] = still_online
-                return
-            else:
-                # Всі вийшли — видаляємо стару сесію
-                del active_sessions[game_name]
 
-        # Шукаємо всіх, хто зараз у цій грі
-        current_players = [m for m in guild.members 
-                          if m.activity and m.activity.type == discord.ActivityType.playing and m.activity.name == game_name]
-        
-        # Анонсуємо, якщо хоча б двоє (або один, якщо хочеш бачити кожного)
-        if len(current_players) >= 2:
-            active_sessions[game_name] = [m.id for m in current_players]
+        # Створюємо замок для гри, якщо його немає
+        if game_name not in creation_locks:
+            creation_locks[game_name] = asyncio.Lock()
+
+        # Починаємо перевірку під замком
+        async with creation_locks[game_name]:
+            # Чистка старої сесії
+            if game_name in active_sessions:
+                still_online = [p_id for p_id in active_sessions[game_name] 
+                                if (m := guild.get_member(p_id)) and m.activity and m.activity.name == game_name]
+                
+                if still_online:
+                    active_sessions[game_name] = still_online
+                    return # Сесія активна — виходимо
+                else:
+                    del active_sessions[game_name]
+
+            # Збір нових гравців
+            current_players = [m for m in guild.members 
+                               if m.activity and m.activity.type == discord.ActivityType.playing and m.activity.name == game_name]
             
-            channel = bot.get_channel(GAMING_LOG_ID)
-            if not channel: return
-            
-            names = [m.display_name for m in current_players]
-            greetings = ["О, вже збирається непогане паті!", "Бачу, намічається катка!", "Вдалого полювання!"]
-            content = f"🎮 **{random.choice(greetings)}**\n**Гравці:** {', '.join(names)}\n**Гра:** {game_name}"
-            
-            if isinstance(channel, discord.ForumChannel):
-                await channel.create_thread(name=f"🎮 {game_name}", content=content)
-            else:
-                await channel.send(content)
+            if len(current_players) >= 2:
+                active_sessions[game_name] = [m.id for m in current_players]
+                
+                channel = bot.get_channel(GAMING_LOG_ID)
+                if not channel: return
+                
+                names = [m.display_name for m in current_players]
+                greetings = ["О, вже збирається непогане паті!", "Бачу, намічається катка!", "Вдалого полювання!"]
+                content = f"🎮 **{random.choice(greetings)}**\n**Гравці:** {', '.join(names)}\n**Гра:** {game_name}"
+                
+                if isinstance(channel, discord.ForumChannel):
+                    await channel.create_thread(name=f"🎮 {game_name}", content=content)
+                else:
+                    await channel.send(content)
+                
+                # Невеликий "відпочинок" після створення, щоб синхронізувати дані
+                await asyncio.sleep(2)
 
 @bot.event
 async def on_voice_state_update(member, before, after):
@@ -141,7 +144,7 @@ async def on_voice_state_update(member, before, after):
 
 @bot.event
 async def on_ready():
-    print(f'--- Midnight {GLOBAL_SETTINGS["version"]} READY ---')
+    print(f'--- Midnight {GLOBAL_SETTINGS["version"]} | Locked & Loaded ---')
     await bot.tree.sync()
     asyncio.create_task(safe_join())
 
