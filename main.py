@@ -50,6 +50,9 @@ TITLES = {
     "League of Legends":         "⚔️ Повелитель Рифту",
     "Valorant":                  "🎯 Снайпер Валоранту",
     "Minecraft":                 "⛏️ Майстер Блоків",
+    "GTA V":                     "🚗 Вуличний Гонщик",
+    "Grand Theft Auto V":        "🚗 Вуличний Гонщик",
+    "Grand Theft Auto V Legacy": "🚗 Вуличний Гонщик",
     "Apex Legends":              "🏆 Легенда Апекса",
     "EA Sports FC 26":           "⚽ Футбольний Бог",
     "EA Sports FC 25":           "⚽ Футбольний Бог",
@@ -278,6 +281,46 @@ async def join_voice_safe():
     elif vc.channel.id != VOICE_ID:
         await vc.move_to(channel)
 
+async def play_tts(text: str, guild: discord.Guild):
+    """Генерує TTS і програє у войсі. Бот залишається в каналі після."""
+    try:
+        from gtts import gTTS
+        import tempfile
+
+        # Генеруємо mp3 у тимчасовий файл
+        tts = gTTS(text=text, lang="uk")
+        tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
+        tts.save(tmp.name)
+        tmp.close()
+
+        # Знаходимо голосовий клієнт бота
+        vc = discord.utils.get(bot.voice_clients, guild=guild)
+        if not vc:
+            await join_voice_safe()
+            await asyncio.sleep(2)
+            vc = discord.utils.get(bot.voice_clients, guild=guild)
+
+        if not vc:
+            print("ERROR play_tts: бот не в войсі")
+            return
+
+        # Чекаємо якщо вже щось грає
+        while vc.is_playing():
+            await asyncio.sleep(0.5)
+
+        # Програємо
+        vc.play(discord.FFmpegPCMAudio(tmp.name))
+
+        # Чекаємо завершення і видаляємо файл
+        while vc.is_playing():
+            await asyncio.sleep(0.5)
+
+        os.remove(tmp.name)
+        print(f"TTS played: {text[:50]}")
+
+    except Exception as e:
+        print(f"ERROR play_tts: {e}")
+
 # ============================================================
 # 7. SLASH-КОМАНДИ
 # ============================================================
@@ -387,7 +430,10 @@ async def help_cmd(interaction: discord.Interaction):
         inline=False
     )
     embed.add_field(
-        name="⚙️ Система",
+        name="🎙️ Войс",
+        value="`/say` — Озвучити текст у голосовому каналі",
+        inline=False
+    )
         value=(
             "`/ping` — Затримка та аптайм\n"
             "`/midnight_info` — Статус модулів\n"
@@ -412,7 +458,17 @@ async def kings_cmd(interaction: discord.Interaction):
     embed.set_footer(text=midnight_footer())
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="midnight_info", description="Статус системи")
+@bot.tree.command(name="say", description="Озвучити текст у голосовому каналі")
+@app_commands.describe(текст="Що сказати у войсі")
+async def say_cmd(interaction: discord.Interaction, текст: str):
+    if len(текст) > 200:
+        return await interaction.response.send_message("❌ Максимум 200 символів", ephemeral=True)
+
+    await interaction.response.send_message(
+        f"🔊 Озвучую: **{текст}**",
+        ephemeral=True
+    )
+    asyncio.create_task(play_tts(текст, interaction.guild))
 async def midnight_info(interaction: discord.Interaction):
     embed = discord.Embed(title="🌑 Midnight Bot | Status", color=0x2b2d31)
     for label, key in [("🎮 Game Monitor", "monitoring"), ("🎙️ Voice Guardian", "voice_guard"), ("📊 Voice Analytics", "voice_stats")]:
@@ -609,7 +665,7 @@ def build_fame_embed(guild) -> discord.Embed:
         top_lines.append(f"{medals[i]} {name}{streak_emoji(uid)} — `{format_time(sec)}`")
 
     embed.add_field(
-        name="👑 Топ-3 Voice ",
+        name="👑 Топ-3 сервера",
         value="\n".join(top_lines) if top_lines else "*Немає даних*",
         inline=False
     )
