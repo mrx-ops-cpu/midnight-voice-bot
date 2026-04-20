@@ -538,7 +538,7 @@ def get_game_name(member) -> str | None:
     return None
 
 def build_live_embed() -> discord.Embed:
-    """Повідомлення №1 — хто грає зараз"""
+    """Повідомлення №1 — хто грає зараз (від 1 людини)"""
     embed = discord.Embed(
         title="🎮 Активні катки",
         color=0x57F287,
@@ -573,7 +573,7 @@ def get_display_name(uid: str, guild) -> str:
     return f"User {uid}"
 
 def build_fame_embed(guild) -> discord.Embed:
-    """Повідомлення №2 — Зал Слави"""
+    """Повідомлення №2 — Зал Слави (тільки збережена статистика, незалежно від войсу)"""
     embed = discord.Embed(
         title="🏛️ Зал Слави",
         color=0xf1c40f,
@@ -582,13 +582,9 @@ def build_fame_embed(guild) -> discord.Embed:
 
     s = load_stats()
 
-    # Топ-3 сервера
-    combined = dict(s.get("total", {}))
-    for user_id, start_time in voice_start_times.items():
-        uid = str(user_id)
-        combined[uid] = combined.get(uid, 0) + (datetime.now().timestamp() - start_time)
-
-    top3   = sorted(combined.items(), key=lambda x: x[1], reverse=True)[:3]
+    # Топ-3 — тільки збережений час (без поточної сесії)
+    total_stats = s.get("total", {})
+    top3   = sorted(total_stats.items(), key=lambda x: x[1], reverse=True)[:3]
     medals = ["🥇", "🥈", "🥉"]
     top_lines = []
     for i, (uid, sec) in enumerate(top3):
@@ -601,7 +597,7 @@ def build_fame_embed(guild) -> discord.Embed:
         inline=False
     )
 
-    # Королі ігор
+    # Королі ігор — тільки збережений час
     kings = get_game_kings()
     if kings:
         king_lines = []
@@ -713,7 +709,7 @@ async def on_presence_update(before, after):
     if after_game:
         game_sessions[after.id] = {"game": after_game, "start_time": datetime.now().timestamp()}
         players = [m.display_name for m in guild.members if get_game_name(m) == after_game and not m.bot]
-        if len(players) >= 3:
+        if len(players) >= 1:
             if after_game not in active_games:
                 active_games[after_game] = {"players": players, "start_time": datetime.now().timestamp()}
             else:
