@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
-from flask import Flask
+from flask import Flask, render_template
 from threading import Thread
 import os
 import asyncio
@@ -9,9 +9,31 @@ import json
 from datetime import datetime, time, timezone
 
 # --- 1. ВЕБ-СЕРВЕР ДЛЯ RAILWAY ---
-app = Flask('')
+app = Flask(__name__, template_folder="templates")
+
 @app.route('/')
-def home(): return "MIDNIGHT SYSTEM ONLINE"
+def dashboard():
+    stats = load_stats()
+
+    top = sorted(stats["total"].items(), key=lambda x: x[1], reverse=True)[:10]
+
+    formatted_top = []
+    for uid, sec in top:
+        user = bot.get_user(int(uid))
+        name = user.name if user else f"ID {uid}"
+        formatted_top.append((name, sec))
+
+    chart_labels = list(range(1, 13))
+    chart_data = [5, 10, 7, 12, 8, 15, 6, 9, 11, 14, 10, 13]
+
+    return render_template(
+        "dashboard.html",
+        voice_online=len(voice_start_times),
+        games=active_games,
+        top_users=formatted_top,
+        chart_labels=chart_labels,
+        chart_data=chart_data
+    )
 
 def run():
     port = int(os.environ.get("PORT", 8080))
