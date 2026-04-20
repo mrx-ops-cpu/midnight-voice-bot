@@ -20,65 +20,137 @@ def run():
 def keep_alive():
     t = Thread(target=run, daemon=True); t.start()
 
-# --- 2. НАЛАШТУВАННЯ ТА ПАМ'ЯТЬ (VOLUME) ---
+# --- 2. НАЛАШТУВАННЯ ТА ПАМ'ЯТЬ ---
 GLOBAL_SETTINGS = {
     "monitoring": True,
     "voice_guard": True,
     "voice_stats": True,
-    "version": "v3.3.3",
+    "version": "v3.4.0",
     "image_url": "https://cdn.discordapp.com/avatars/1492662597357404211/a_4bf48afaac3798695e46c007ce568803.gif?size=1024"
 }
 
 DATA_DIR = "/app/data"
 STATS_FILE = os.path.join(DATA_DIR, "voice_stats.json")
+SESSIONS_FILE = os.path.join(DATA_DIR, "active_sessions.json")
 
-if not os.path.exists(DATA_DIR):
-    os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(DATA_DIR, exist_ok=True)
 
-VOICE_ID = 1458906259922354277 
-GAMING_LOG_ID = 1493054931224105070 
+VOICE_ID = 1458906259922354277
+GAMING_LOG_ID = 1493054931224105070
 
+# voice_start_times[user_id] = timestamp коли зайшов (float)
 voice_start_times = {}
-active_sessions = {}
+
 pending_announcements = set()
+active_sessions = {}
+
+# --- РОБОТА ЗІ СТАТИСТИКОЮ ---
 
 def load_stats():
     if os.path.exists(STATS_FILE):
         try:
-            with open(STATS_FILE, "r") as f: return json.load(f)
-        except: pass
+            with open(STATS_FILE, "r") as f:
+                data = json.load(f)
+                if "total" not in data:
+                    data["total"] = {}
+                if "daily" not in data:
+                    data["daily"] = {}
+                return data
+        except Exception as e:
+            print(f"ERROR loading stats: {e}")
     return {"total": {}, "daily": {}}
 
 def save_stats(data):
     try:
-        with open(STATS_FILE, "w") as f: json.dump(data, f, indent=4)
-    except: pass
+        with open(STATS_FILE, "w") as f:
+            json.dump(data, f, indent=4)
+    except Exception as e:
+        print(f"ERROR saving stats: {e}")
+
+def load_sessions():
+    if os.path.exists(SESSIONS_FILE):
+        try:
+            with open(SESSIONS_FILE, "r") as f:
+                raw = json.load(f)
+                # Ключі зберігаємо як int
+                return {int(k): float(v) for k, v in raw.items()}
+        except:
+            pass
+    return {}
+
+def save_sessions():
+    try:
+        with open(SESSIONS_FILE, "w") as f:
+            json.dump({str(k): v for k, v in voice_start_times.items()}, f)
+    except Exception as e:
+        print(f"ERROR saving sessions: {e}")
 
 def format_time(seconds):
+    """Форматує секунди у читабельний вигляд з секундами"""
     seconds = int(seconds)
-    h, m, s = seconds // 3600, (seconds % 3600) // 60, seconds % 60
+    if seconds < 0:
+        seconds = 0
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    s = seconds % 60
     res = []
-    if h > 0: res.append(f"{h}г")
-    if m > 0: res.append(f"{m}хв")
-    if s > 0 or not res: res.append(f"{s}с")
+    if h > 0:
+        res.append(f"{h}г")
+    if m > 0:
+        res.append(f"{m}хв")
+    # Секунди показуємо ЗАВЖДИ
+    res.append(f"{s}с")
     return " ".join(res)
+
+def add_voice_time(member_id: int, duration: float):
+    """
+    Додає duration до збереженої статистики.
+    Викликається ТІЛЬКИ коли сесія закінчується (вихід з каналу).
+    """
+    if duration <= 0:
+        return
+    s = load_stats()
+    uid = str(member_id)
+    s["total"][uid] = s["total"].get(uid, 0) + duration
+    s["daily"][uid] = s["daily"].get(uid, 0) + duration
+    save_stats(s)
+    print(f"STATS: +{format_time(duration)} для {member_id} | всього: {format_time(s['total'][uid])}")
+
+def get_current_session(user_id: int) -> float:
+    """Повертає тривалість поточної сесії в секундах (0 якщо не в войсі)"""
+    if user_id in voice_start_times:
+        return datetime.now().timestamp() - voice_start_times[user_id]
+    return 0.0
+
+def get_total_time(user_id: int) -> float:
+    """Повертає загальний час = збережений + поточна сесія"""
+    s = load_stats()
+    saved = s["total"].get(str(user_id), 0)
+    return saved + get_current_session(user_id)
+
+def get_daily_time(user_id: int) -> float:
+    """Повертає денний час = збережений + поточна сесія"""
+    s = load_stats()
+    saved = s["daily"].get(str(user_id), 0)
+    return saved + get_current_session(user_id)
 
 # --- ІНТЕНТИ ТА ІНІЦІАЛІЗАЦІЯ ---
 intents = discord.Intents.all()
-intents.members = True
-intents.presences = True
-
 bot = commands.Bot(command_prefix='!', intents=intents, chunk_guilds_at_startup=True)
 
-# --- 3. ФУНКЦІЯ АВТОНОМНОГО ВХОДУ ---
+# --- 3. АВТОНОМНИЙ ВХІД У ВОЙС ---
 async def join_voice_safe():
-    if not GLOBAL_SETTINGS["voice_guard"]: return
+    if not GLOBAL_SETTINGS["voice_guard"]:
+        return
     channel = bot.get_channel(VOICE_ID)
-    if not channel: return
+    if not channel:
+        return
     current_vc = discord.utils.get(bot.voice_clients, guild=channel.guild)
     if not current_vc:
-        try: await channel.connect(timeout=20.0, reconnect=True)
-        except: pass
+        try:
+            await channel.connect(timeout=20.0, reconnect=True)
+        except Exception as e:
+            print(f"ERROR joining voice: {e}")
     elif current_vc.channel.id != VOICE_ID:
         await current_vc.move_to(channel)
 
@@ -87,10 +159,74 @@ async def join_voice_safe():
 @bot.tree.command(name="midnight_info", description="Статус системи")
 async def midnight_info(interaction: discord.Interaction):
     embed = discord.Embed(title="🌑 Midnight Bot | Status", color=0x2b2d31)
-    for k, v in [("🎮 Game Monitor", "monitoring"), ("🎙️ Voice Guardian", "voice_guard"), ("📊 Voice Analytics", "voice_stats")]:
-        status = "🟢 ON" if GLOBAL_SETTINGS[v] else "🔴 OFF"
-        embed.add_field(name=k, value=f"Статус: `{status}`", inline=True)
+    for label, key in [("🎮 Game Monitor", "monitoring"), ("🎙️ Voice Guardian", "voice_guard"), ("📊 Voice Analytics", "voice_stats")]:
+        status = "🟢 ON" if GLOBAL_SETTINGS[key] else "🔴 OFF"
+        embed.add_field(name=label, value=f"Статус: `{status}`", inline=True)
+    embed.add_field(name="👥 Зараз у войсі", value=f"`{len(voice_start_times)}` користувачів", inline=True)
     embed.set_thumbnail(url=GLOBAL_SETTINGS["image_url"])
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="mystats", description="Твоя особиста статистика")
+async def mystats(interaction: discord.Interaction):
+    if not GLOBAL_SETTINGS["voice_stats"]:
+        return await interaction.response.send_message("❌ Статистика вимкнена", ephemeral=True)
+
+    uid = interaction.user.id
+    total = get_total_time(uid)
+    daily = get_daily_time(uid)
+    current = get_current_session(uid)
+
+    embed = discord.Embed(
+        title=f"📊 Статистика {interaction.user.display_name}",
+        color=0x3498db
+    )
+    embed.add_field(name="📅 Сьогодні", value=f"`{format_time(daily)}`", inline=True)
+    embed.add_field(name="🏆 Весь час", value=f"`{format_time(total)}`", inline=True)
+
+    if current > 0:
+        embed.add_field(name="🎙️ Поточна сесія", value=f"`{format_time(current)}`", inline=True)
+
+    embed.set_thumbnail(url=interaction.user.display_avatar.url)
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="leaderboard", description="Топ активності")
+@app_commands.choices(період=[
+    app_commands.Choice(name="Весь час", value="total"),
+    app_commands.Choice(name="Сьогодні", value="daily")
+])
+async def leaderboard(interaction: discord.Interaction, період: app_commands.Choice[str]):
+    if not GLOBAL_SETTINGS["voice_stats"]:
+        return await interaction.response.send_message("❌ Вимкнено", ephemeral=True)
+
+    s = load_stats()
+    saved = dict(s.get(період.value, {}))
+
+    # Додаємо поточні сесії БЕЗ подвійного рахування
+    for user_id, start_time in voice_start_times.items():
+        uid = str(user_id)
+        current = datetime.now().timestamp() - start_time
+        saved[uid] = saved.get(uid, 0) + current
+
+    sorted_s = sorted(saved.items(), key=lambda x: x[1], reverse=True)[:10]
+
+    res = ""
+    medals = ["🥇", "🥈", "🥉"]
+    for i, (u_id, sec) in enumerate(sorted_s):
+        member = interaction.guild.get_member(int(u_id))
+        if not member:
+            try:
+                member = await bot.fetch_user(int(u_id))
+            except:
+                pass
+        name = member.display_name if hasattr(member, 'display_name') else (member.name if member else f"ID: {u_id}")
+        medal = medals[i] if i < 3 else f"**{i+1}.**"
+        res += f"{medal} {name} — `{format_time(sec)}`\n"
+
+    embed = discord.Embed(
+        title=f"🏆 Топ активності | {період.name}",
+        description=res or "Ще немає даних",
+        color=0xf1c40f
+    )
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="set_monitoring")
@@ -104,7 +240,8 @@ async def set_monitoring(interaction: discord.Interaction, стан: app_command
 async def set_voice(interaction: discord.Interaction, стан: app_commands.Choice[str]):
     GLOBAL_SETTINGS["voice_guard"] = (стан.value == "on")
     if not GLOBAL_SETTINGS["voice_guard"]:
-        for vc in bot.voice_clients: await vc.disconnect()
+        for vc in bot.voice_clients:
+            await vc.disconnect()
     await interaction.response.send_message(f"🎙️ Voice Guardian: **{'Увімкнено' if GLOBAL_SETTINGS['voice_guard'] else 'Вимкнено'}**")
 
 @bot.tree.command(name="set_stats")
@@ -113,80 +250,117 @@ async def set_stats(interaction: discord.Interaction, стан: app_commands.Cho
     GLOBAL_SETTINGS["voice_stats"] = (стан.value == "on")
     await interaction.response.send_message(f"📊 Статистика: **{'Увімкнено' if GLOBAL_SETTINGS['voice_stats'] else 'Вимкнено'}**")
 
-@bot.tree.command(name="leaderboard", description="Топ активності")
-@app_commands.choices(період=[app_commands.Choice(name="Весь час", value="total"), app_commands.Choice(name="Сьогодні", value="daily")])
-async def leaderboard(interaction: discord.Interaction, період: app_commands.Choice[str]):
-    if not GLOBAL_SETTINGS["voice_stats"]: return await interaction.response.send_message("❌ Вимкнено", ephemeral=True)
-    
-    stats_data = load_stats().get(період.value, {})
-    sorted_s = sorted(stats_data.items(), key=lambda x: x[1], reverse=True)[:10]
-    
-    res = ""
-    for i, (u_id, sec) in enumerate(sorted_s, 1):
-        member = interaction.guild.get_member(int(u_id))
-        if not member:
-            try: member = await bot.fetch_user(int(u_id))
-            except: pass
-        name = member.display_name if hasattr(member, 'display_name') else (member.name if member else f"ID: {u_id}")
-        res += f"**{i}.** {name} — `{format_time(sec)}`\n"
-    
-    await interaction.response.send_message(embed=discord.Embed(title=f"🏆 Топ {період.name}", description=res or "Пусто", color=0xf1c40f))
-
 # --- 5. ЛОГІКА ПОДІЙ ---
 
 @bot.event
 async def on_voice_state_update(member, before, after):
-    # Лог для відладки
-    print(f"DEBUG: {member.name} {before.channel} -> {after.channel}")
+    print(f"VOICE: {member.name} | {before.channel} -> {after.channel}")
 
+    # Voice Guard — автоматичне повернення бота
     if member.id == bot.user.id and before.channel and not after.channel:
         if GLOBAL_SETTINGS["voice_guard"]:
             await asyncio.sleep(5)
             await join_voice_safe()
+        return
 
-    if member.bot or not GLOBAL_SETTINGS["voice_stats"]: return
-    
+    # Ботів не відстежуємо
+    if member.bot:
+        return
+
+    if not GLOBAL_SETTINGS["voice_stats"]:
+        return
+
+    now = datetime.now().timestamp()
+
+    # ЗАЙШОВ у войс (з нікуди)
     if not before.channel and after.channel:
-        voice_start_times[member.id] = datetime.now().timestamp()
+        voice_start_times[member.id] = now
+        save_sessions()
+        print(f"START: {member.name} @ {after.channel.name}")
+
+    # ВИЙШОВ з войсу (в нікуди)
     elif before.channel and not after.channel:
         if member.id in voice_start_times:
-            duration = datetime.now().timestamp() - voice_start_times[member.id]
-            del voice_start_times[member.id]
-            s = load_stats()
-            uid = str(member.id)
-            s["total"][uid] = s["total"].get(uid, 0) + duration
-            s["daily"][uid] = s["daily"].get(uid, 0) + duration
-            save_stats(s)
+            duration = now - voice_start_times.pop(member.id)
+            save_sessions()
+            add_voice_time(member.id, duration)
+            print(f"END: {member.name} | сесія: {format_time(duration)}")
+
+    # ПЕРЕЙШОВ між каналами — сесія ПРОДОВЖУЄТЬСЯ, нічого не чіпаємо
+    elif before.channel and after.channel and before.channel.id != after.channel.id:
+        print(f"SWITCH: {member.name} | {before.channel.name} -> {after.channel.name}")
+
+# --- 6. ЩОДЕННИЙ ЗВІТ ---
 
 @tasks.loop(time=time(hour=0, minute=0, tzinfo=timezone.utc))
 async def daily_report():
-    if not GLOBAL_SETTINGS["voice_stats"]: return
-    ch, s = bot.get_channel(GAMING_LOG_ID), load_stats()
-    if not s["daily"] or not ch: return
+    if not GLOBAL_SETTINGS["voice_stats"]:
+        return
+
+    # Спочатку зберігаємо поточні сесії перед скиданням
+    now = datetime.now().timestamp()
+    for user_id, start_time in list(voice_start_times.items()):
+        duration = now - start_time
+        if duration > 0:
+            add_voice_time(user_id, duration)
+            voice_start_times[user_id] = now  # Скидаємо таймер сесії на новий день
+
+    ch = bot.get_channel(GAMING_LOG_ID)
+    s = load_stats()
+
+    if not s["daily"] or not ch:
+        s["daily"] = {}
+        save_stats(s)
+        return
+
     top = sorted(s["daily"].items(), key=lambda x: x[1], reverse=True)[:5]
-    msg = "📊 **Підсумки дня:**\n" + "\n".join([f"{i+1}. {bot.get_user(int(uid)).display_name} — {format_time(sec)}" for i, (uid, sec) in enumerate(top)])
-    await ch.send(msg)
+
+    medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
+    lines = []
+    for i, (uid, sec) in enumerate(top):
+        user = bot.get_user(int(uid))
+        name = user.name if user else f"User {uid}"
+        lines.append(f"{medals[i]} {name} — {format_time(sec)}")
+
+    embed = discord.Embed(
+        title="📊 Підсумки дня",
+        description="\n".join(lines),
+        color=0x9b59b6,
+        timestamp=datetime.now(timezone.utc)
+    )
+    await ch.send(embed=embed)
+
+    # Скидаємо денну статистику
     s["daily"] = {}
     save_stats(s)
+    print("DAILY RESET: Денна статистика скинута")
 
-# --- 6. МОНІТОРИНГ ІГОР ---
+# --- 7. МОНІТОРИНГ ІГОР ---
+
 async def announce_game(guild_id, game_name):
     await asyncio.sleep(30)
     g = bot.get_guild(guild_id)
-    if not g: return
-    players = [m for m in g.members if m.activity and m.activity.type == discord.ActivityType.playing and m.activity.name == game_name]
+    if not g:
+        return
+    players = [
+        m for m in g.members
+        if m.activity and m.activity.type == discord.ActivityType.playing and m.activity.name == game_name
+    ]
     if len(players) >= 3:
         active_sessions[game_name] = [m.id for m in players]
         ch = bot.get_channel(GAMING_LOG_ID)
         if ch:
             content = f"🎮 **Нова катка!**\n**Гравці:** {', '.join([m.display_name for m in players])}\n**Гра:** {game_name}"
-            if isinstance(ch, discord.ForumChannel): await ch.create_thread(name=f"🎮 {game_name}", content=content)
-            else: await ch.send(content)
+            if isinstance(ch, discord.ForumChannel):
+                await ch.create_thread(name=f"🎮 {game_name}", content=content)
+            else:
+                await ch.send(content)
     pending_announcements.discard(game_name)
 
 @bot.event
 async def on_presence_update(before, after):
-    if not GLOBAL_SETTINGS["monitoring"]: return
+    if not GLOBAL_SETTINGS["monitoring"]:
+        return
     if after.activity and after.activity.type == discord.ActivityType.playing:
         if not (before.activity and before.activity.name == after.activity.name):
             name = after.activity.name
@@ -194,14 +368,43 @@ async def on_presence_update(before, after):
                 pending_announcements.add(name)
                 asyncio.create_task(announce_game(after.guild.id, name))
 
+# --- 8. СТАРТ БОТА ---
+
 @bot.event
 async def on_ready():
+    global voice_start_times
     print(f'--- Midnight {GLOBAL_SETTINGS["version"]} ONLINE ---')
+
     await bot.tree.sync()
-    if not daily_report.is_running(): daily_report.start()
+
+    # Відновлюємо збережені сесії
+    saved_sessions = load_sessions()
+
+    for guild in bot.guilds:
+        for channel in guild.voice_channels:
+            for member in channel.members:
+                if member.bot:
+                    continue
+                if member.id in saved_sessions:
+                    voice_start_times[member.id] = saved_sessions[member.id]
+                    print(f"RESTORED: {member.name}")
+                else:
+                    voice_start_times[member.id] = datetime.now().timestamp()
+                    print(f"NEW SESSION (on_ready): {member.name}")
+
+    save_sessions()
+
+    if not daily_report.is_running():
+        daily_report.start()
+
     await asyncio.sleep(2)
     await join_voice_safe()
 
+    print(f"READY: відстежую {len(voice_start_times)} юзерів у войсі")
+
 if __name__ == "__main__":
     keep_alive()
-    bot.run("MTQ5MjY2MjU5NzM1NzQwNDIxMQ.GYOjct.FXboTEBC3CQDhARJM4MJSSQJGtVkhp6yQSAlks")
+    token = os.environ.get("DISCORD_TOKEN")
+    if not token:
+        raise ValueError("DISCORD_TOKEN не знайдено в змінних середовища!")
+    bot.run(token)
