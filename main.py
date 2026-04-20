@@ -430,7 +430,7 @@ async def on_presence_update(before, after):
         if name in active_games[before_game]["players"]:
             active_games[before_game]["players"].remove(name)
             # Якщо менше 3 — прибираємо гру зі списку
-            if len(active_games[before_game]["players"]) < 3:
+            if len(active_games[before_game]["players"]) < 1:
                 del active_games[before_game]
                 print(f"GAME REMOVED: {before_game}")
             changed = True
@@ -445,7 +445,7 @@ async def on_presence_update(before, after):
             and m.activity.name == after_game
         ]
 
-        if len(players_in_game) >= 3:
+        if len(players_in_game) >= 1:
             if after_game not in active_games:
                 # Нова гра
                 active_games[after_game] = {
