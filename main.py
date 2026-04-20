@@ -37,12 +37,15 @@ os.makedirs(DATA_DIR, exist_ok=True)
 
 VOICE_ID = 1458906259922354277
 GAMING_LOG_ID = 1493054931224105070
+GAMING_MONITOR_ID = 1495833786741424178  # Канал з живим списком ігор
 
 # voice_start_times[user_id] = timestamp коли зайшов (float)
 voice_start_times = {}
 
-pending_announcements = set()
-active_sessions = {}
+# Моніторинг ігор
+# active_games = { "Dota 2": { "players": [member_id, ...], "start_time": timestamp } }
+active_games = {}
+gaming_message_id = None  # ID єдиного повідомлення яке редагується
 
 # --- РОБОТА ЗІ СТАТИСТИКОЮ ---
 
@@ -337,36 +340,127 @@ async def daily_report():
 
 # --- 7. МОНІТОРИНГ ІГОР ---
 
-async def announce_game(guild_id, game_name):
-    await asyncio.sleep(30)
-    g = bot.get_guild(guild_id)
-    if not g:
+def build_games_embed() -> discord.Embed:
+    """Будує embed зі списком всіх активних ігор"""
+    embed = discord.Embed(
+        title="🎮 Активні катки",
+        color=0x57F287,
+        timestamp=datetime.now(timezone.utc)
+    )
+
+    if not active_games:
+        embed.description = "*Зараз ніхто не грає*"
+        return embed
+
+    lines = []
+    for game_name, data in active_games.items():
+        players = data["players"]
+        start = data["start_time"]
+        duration = int(datetime.now().timestamp() - start)
+        m = duration // 60
+        h = m // 60
+        time_str = f"{h}г {m % 60}хв" if h > 0 else f"{m}хв"
+
+        names = ", ".join(players) if players else "?"
+        lines.append(f"**{game_name}**\n👥 {names}\n⏱️ {time_str}\n")
+
+    embed.description = "\n".join(lines)
+    embed.set_footer(text="Оновлюється автоматично")
+    return embed
+
+async def update_games_message(guild: discord.Guild):
+    """Оновлює або створює єдине повідомлення зі списком ігор"""
+    global gaming_message_id
+
+    ch = bot.get_channel(GAMING_MONITOR_ID)
+    if not ch:
         return
-    players = [
-        m for m in g.members
-        if m.activity and m.activity.type == discord.ActivityType.playing and m.activity.name == game_name
-    ]
-    if len(players) >= 3:
-        active_sessions[game_name] = [m.id for m in players]
-        ch = bot.get_channel(GAMING_LOG_ID)
-        if ch:
-            content = f"🎮 **Нова катка!**\n**Гравці:** {', '.join([m.display_name for m in players])}\n**Гра:** {game_name}"
-            if isinstance(ch, discord.ForumChannel):
-                await ch.create_thread(name=f"🎮 {game_name}", content=content)
-            else:
-                await ch.send(content)
-    pending_announcements.discard(game_name)
+
+    embed = build_games_embed()
+
+    # Пробуємо відредагувати існуюче повідомлення
+    if gaming_message_id:
+        try:
+            msg = await ch.fetch_message(gaming_message_id)
+            await msg.edit(embed=embed)
+            return
+        except discord.NotFound:
+            gaming_message_id = None
+        except Exception as e:
+            print(f"ERROR editing games message: {e}")
+
+    # Якщо повідомлення не існує — шукаємо останнє повідомлення бота в каналі
+    try:
+        async for msg in ch.history(limit=20):
+            if msg.author.id == bot.user.id and msg.embeds:
+                gaming_message_id = msg.id
+                await msg.edit(embed=embed)
+                return
+    except:
+        pass
+
+    # Якщо нічого не знайшли — створюємо нове
+    try:
+        msg = await ch.send(embed=embed)
+        gaming_message_id = msg.id
+    except Exception as e:
+        print(f"ERROR sending games message: {e}")
 
 @bot.event
 async def on_presence_update(before, after):
     if not GLOBAL_SETTINGS["monitoring"]:
         return
-    if after.activity and after.activity.type == discord.ActivityType.playing:
-        if not (before.activity and before.activity.name == after.activity.name):
-            name = after.activity.name
-            if name not in pending_announcements and name not in active_sessions:
-                pending_announcements.add(name)
-                asyncio.create_task(announce_game(after.guild.id, name))
+    if after.bot:
+        return
+
+    guild = after.guild
+
+    # Визначаємо поточну гру
+    before_game = before.activity.name if before.activity and before.activity.type == discord.ActivityType.playing else None
+    after_game = after.activity.name if after.activity and after.activity.type == discord.ActivityType.playing else None
+
+    if before_game == after_game:
+        return  # Нічого не змінилось
+
+    changed = False
+
+    # Гравець ВИЙШОВ з гри
+    if before_game and before_game in active_games:
+        name = after.display_name
+        if name in active_games[before_game]["players"]:
+            active_games[before_game]["players"].remove(name)
+            # Якщо менше 3 — прибираємо гру зі списку
+            if len(active_games[before_game]["players"]) < 3:
+                del active_games[before_game]
+                print(f"GAME REMOVED: {before_game}")
+            changed = True
+
+    # Гравець ЗАЙШОВ у гру
+    if after_game:
+        # Підраховуємо скільки людей грають
+        players_in_game = [
+            m.display_name for m in guild.members
+            if not m.bot and m.activity
+            and m.activity.type == discord.ActivityType.playing
+            and m.activity.name == after_game
+        ]
+
+        if len(players_in_game) >= 3:
+            if after_game not in active_games:
+                # Нова гра
+                active_games[after_game] = {
+                    "players": players_in_game,
+                    "start_time": datetime.now().timestamp()
+                }
+                print(f"GAME ADDED: {after_game} | {players_in_game}")
+            else:
+                # Оновлюємо список гравців
+                active_games[after_game]["players"] = players_in_game
+                print(f"GAME UPDATED: {after_game} | {players_in_game}")
+            changed = True
+
+    if changed:
+        await update_games_message(guild)
 
 # --- 8. СТАРТ БОТА ---
 
