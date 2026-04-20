@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Midnight Dashboard</title>
+
+    <!-- Шрифт -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Inter', sans-serif;
+            background: #0f1117;
+            color: #e6e6e6;
+        }
+
+        header {
+            padding: 20px;
+            font-size: 24px;
+            font-weight: 600;
+            background: #181c24;
+            border-bottom: 1px solid #2a2f3a;
+        }
+
+        .container {
+            padding: 20px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: #181c24;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.4);
+        }
+
+        .card h3 {
+            margin-top: 0;
+            font-size: 18px;
+            color: #9aa4b2;
+        }
+
+        .big {
+            font-size: 28px;
+            font-weight: 600;
+        }
+
+        .leaderboard div {
+            margin: 5px 0;
+        }
+
+        .game {
+            margin-bottom: 10px;
+        }
+
+        canvas {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+
+<header>🌑 Midnight Dashboard</header>
+
+<div class="container">
+
+    <div class="grid">
+
+        <!-- Онлайн -->
+        <div class="card">
+            <h3>👥 У войсі</h3>
+            <div class="big">{{ voice_online }}</div>
+        </div>
+
+        <!-- Ігри -->
+        <div class="card">
+            <h3>🎮 Активні ігри</h3>
+            {% for game, data in games.items() %}
+                <div class="game">
+                    <b>{{ game }}</b><br>
+                    👥 {{ data.players|join(', ') }}
+                </div>
+            {% else %}
+                <p>Ніхто не грає</p>
+            {% endfor %}
+        </div>
+
+        <!-- Топ -->
+        <div class="card">
+            <h3>🏆 Топ голосу</h3>
+            <div class="leaderboard">
+                {% for user, time in top_users %}
+                    <div>{{ loop.index }}. {{ user }} — {{ (time // 60)|int }} хв</div>
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Графік -->
+    <div class="card">
+        <h3>📈 Активність</h3>
+        <canvas id="chart"></canvas>
+    </div>
+
+</div>
+
+<script>
+    const ctx = document.getElementById('chart');
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: {{ chart_labels | safe }},
+            datasets: [{
+                label: 'Активність',
+                data: {{ chart_data | safe }},
+                tension: 0.3
+            }]
+        }
+    });
+</script>
+
+</body>
+</html>
