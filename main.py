@@ -25,7 +25,7 @@ GLOBAL_SETTINGS = {
     "monitoring": True,
     "voice_guard": True,
     "voice_stats": True,
-    "version": "v3.4.0",
+    "version": "v3.4.1",
     "image_url": "https://cdn.discordapp.com/avatars/1492662597357404211/a_4bf48afaac3798695e46c007ce568803.gif?size=1024"
 }
 
@@ -340,6 +340,15 @@ async def daily_report():
 
 # --- 7. МОНІТОРИНГ ІГОР ---
 
+def get_game_name(member):
+    """Шукає гру в усіх активностях юзера (всеїдний режим)"""
+    if not member.activities:
+        return None
+    for act in member.activities:
+        if act.type == discord.ActivityType.playing:
+            return act.name
+    return None
+
 def build_games_embed() -> discord.Embed:
     """Будує embed зі списком всіх активних ігор"""
     embed = discord.Embed(
@@ -413,11 +422,12 @@ async def on_presence_update(before, after):
     if after.bot:
         return
 
+    # Затримка, щоб Discord оновив статус
+    await asyncio.sleep(1)
     guild = after.guild
 
-    # Визначаємо поточну гру
-    before_game = before.activity.name if before.activity and before.activity.type == discord.ActivityType.playing else None
-    after_game = after.activity.name if after.activity and after.activity.type == discord.ActivityType.playing else None
+    before_game = get_game_name(before)
+    after_game = get_game_name(after)
 
     if before_game == after_game:
         return  # Нічого не змінилось
@@ -426,24 +436,20 @@ async def on_presence_update(before, after):
 
     # Гравець ВИЙШОВ з гри
     if before_game and before_game in active_games:
-        name = after.display_name
-        if name in active_games[before_game]["players"]:
-            active_games[before_game]["players"].remove(name)
-            # Якщо менше 3 — прибираємо гру зі списку
-            if len(active_games[before_game]["players"]) < 1:
+        # Перераховуємо актуальний список гравців для цієї гри
+        players = [m.display_name for m in guild.members if get_game_name(m) == before_game]
+        if not players:
+            if before_game in active_games:
                 del active_games[before_game]
                 print(f"GAME REMOVED: {before_game}")
-            changed = True
+        else:
+            active_games[before_game]["players"] = players
+        changed = True
 
     # Гравець ЗАЙШОВ у гру
     if after_game:
-        # Підраховуємо скільки людей грають
-        players_in_game = [
-            m.display_name for m in guild.members
-            if not m.bot and m.activity
-            and m.activity.type == discord.ActivityType.playing
-            and m.activity.name == after_game
-        ]
+        # Збираємо всіх, хто зараз у цій грі
+        players_in_game = [m.display_name for m in guild.members if get_game_name(m) == after_game]
 
         if len(players_in_game) >= 1:
             if after_game not in active_games:
