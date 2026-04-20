@@ -3,11 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Midnight Dashboard</title>
-
-    <!-- Шрифт -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
-
-    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
@@ -24,15 +20,16 @@
             font-weight: 600;
             background: #181c24;
             border-bottom: 1px solid #2a2f3a;
+            display: flex;
+            align-items: center;
+            gap: 15px;
         }
 
-        .container {
-            padding: 20px;
-        }
+        .container { padding: 20px; }
 
         .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 20px;
         }
 
@@ -40,93 +37,142 @@
             background: #181c24;
             padding: 20px;
             border-radius: 12px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.4);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
         }
 
         .card h3 {
             margin-top: 0;
-            font-size: 18px;
+            font-size: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
             color: #9aa4b2;
+            margin-bottom: 15px;
         }
 
         .big {
-            font-size: 28px;
+            font-size: 32px;
+            font-weight: 600;
+            color: #57F287;
+        }
+
+        /* Стилі для ігор */
+        .game-item {
+            background: #1e232d;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid #5865F2;
+        }
+
+        .game-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .game-name { font-weight: 600; color: #fff; }
+
+        .time-badge {
+            background: rgba(88, 101, 242, 0.2);
+            color: #5865F2;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
             font-weight: 600;
         }
 
-        .leaderboard div {
-            margin: 5px 0;
+        .players-list {
+            font-size: 13px;
+            color: #9aa4b2;
         }
 
-        .game {
-            margin-bottom: 10px;
+        /* Стилі для топу */
+        .leaderboard-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #2a2f3a;
         }
+        
+        .leaderboard-item:last-child { border: none; }
+        
+        .user-name { color: #fff; }
+        .user-time { color: #f1c40f; font-weight: 600; }
 
-        canvas {
-            margin-top: 20px;
-        }
+        canvas { margin-top: 20px; width: 100% !important; }
     </style>
 </head>
-
 <body>
 
 <header>🌑 Midnight Dashboard</header>
 
 <div class="container">
-
     <div class="grid">
 
-        <!-- Онлайн -->
         <div class="card">
-            <h3>👥 У войсі</h3>
+            <h3>👥 У войсі зараз</h3>
             <div class="big">{{ voice_online }}</div>
         </div>
 
-        <!-- Ігри -->
         <div class="card">
             <h3>🎮 Активні ігри</h3>
-            {% for game, data in games.items() %}
-                <div class="game">
-                    <b>{{ game }}</b><br>
-                    👥 {{ data.players|join(', ') }}
+            {% for game in games %}
+                <div class="game-item">
+                    <div class="game-header">
+                        <span class="game-name">{{ game.name }}</span>
+                        <span class="time-badge">⏱️ {{ game.time }}</span>
+                    </div>
+                    <div class="players-list">
+                        👥 {{ game.players }}
+                    </div>
                 </div>
             {% else %}
-                <p>Ніхто не грає</p>
+                <p style="color: #666;">Зараз ніхто не грає</p>
             {% endfor %}
         </div>
 
-        <!-- Топ -->
         <div class="card">
-            <h3>🏆 Топ голосу</h3>
+            <h3>🏆 Топ активності (Voice)</h3>
             <div class="leaderboard">
-                {% for user, time in top_users %}
-                    <div>{{ loop.index }}. {{ user }} — {{ (time // 60)|int }} хв</div>
+                {% for user, time_str in top_users %}
+                    <div class="leaderboard-item">
+                        <span class="user-name">{{ loop.index }}. {{ user }}</span>
+                        <span class="user-time">{{ time_str }}</span>
+                    </div>
                 {% endfor %}
             </div>
         </div>
 
     </div>
 
-    <!-- Графік -->
-    <div class="card">
-        <h3>📈 Активність</h3>
+    <div class="card" style="margin-top: 20px;">
+        <h3>📈 Активність за останній час</h3>
         <canvas id="chart"></canvas>
     </div>
-
 </div>
 
 <script>
     const ctx = document.getElementById('chart');
-
     new Chart(ctx, {
         type: 'line',
         data: {
             labels: {{ chart_labels | safe }},
             datasets: [{
-                label: 'Активність',
+                label: 'Сесії',
                 data: {{ chart_data | safe }},
-                tension: 0.3
+                borderColor: '#5865F2',
+                backgroundColor: 'rgba(88, 101, 242, 0.1)',
+                fill: true,
+                tension: 0.4
             }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: { beginAtZero: true, grid: { color: '#2a2f3a' } },
+                x: { grid: { color: '#2a2f3a' } }
+            }
         }
     });
 </script>
