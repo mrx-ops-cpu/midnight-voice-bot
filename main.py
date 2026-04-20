@@ -44,14 +44,26 @@ GAMING_MONITOR_ID = 1495833786741424178
 
 # Титули для ігор
 TITLES = {
-    "Dota 2":            "👑 Король Доти",
-    "Counter-Strike 2":  "🔫 Задрот КС",
-    "CS2":               "🔫 Задрот КС",
-    "League of Legends": "⚔️ Повелитель Рифту",
-    "Valorant":          "🎯 Снайпер Валоранту",
-    "Minecraft":         "⛏️ Майстер Блоків",
-    "GTA V":             "🚗 Вуличний Гонщик",
-    "Apex Legends":      "🏆 Легенда Апекса",
+    "Dota 2":                    "👑 Король Доти",
+    "Counter-Strike 2":          "🔫 Задрот КС",
+    "CS2":                       "🔫 Задрот КС",
+    "League of Legends":         "⚔️ Повелитель Рифту",
+    "Valorant":                  "🎯 Снайпер Валоранту",
+    "Minecraft":                 "⛏️ Майстер Блоків",
+    "GTA V":                     "🚗 Вуличний Гонщик",
+    "Grand Theft Auto V":        "🚗 Вуличний Гонщик",
+    "Grand Theft Auto V Legacy": "🚗 Вуличний Гонщик",
+    "Apex Legends":              "🏆 Легенда Апекса",
+    "EA Sports FC 26":           "⚽ Футбольний Бог",
+    "EA Sports FC 25":           "⚽ Футбольний Бог",
+    "FIFA 23":                   "⚽ Футбольний Бог",
+    "FIFA 24":                   "⚽ Футбольний Бог",
+    "RADMIR CRMP":               "🚔 Вуличний Авторитет",
+    "World of Warcraft":         "🧙 Майстер Азерота",
+    "Fortnite":                  "🪂 Чемпіон Острова",
+    "Call of Duty":              "🪖 Бойова Машина",
+    "Rocket League":             "🚀 Повітряний Ас",
+    "Among Us":                  "🕵️ Майстер Брехні",
 }
 DEFAULT_TITLE = "🎮 Майстер {game}"
 
@@ -471,7 +483,15 @@ async def on_voice_state_update(member, before, after):
             save_sessions()
             game = game_sessions.get(member.id, {}).get("game")
             add_voice_time(member.id, duration, game)
+            # Якщо грав — видаляємо ігрову сесію (щоб не рахувати двічі в on_presence_update)
+            if member.id in game_sessions:
+                del game_sessions[member.id]
             print(f"END: {member.name} | {format_time(duration)}")
+            # Оновлюємо Зал Слави бо змінився total час
+            for guild in bot.guilds:
+                if member.guild == guild:
+                    asyncio.create_task(update_fame_message(guild))
+                    break
 
     # ПЕРЕЙШОВ між каналами — сесія продовжується
     elif before.channel and after.channel and before.channel.id != after.channel.id:
@@ -592,7 +612,7 @@ def build_fame_embed(guild) -> discord.Embed:
         top_lines.append(f"{medals[i]} {name}{streak_emoji(uid)} — `{format_time(sec)}`")
 
     embed.add_field(
-        name="👑 Топ-3 Voice ",
+        name="👑 Топ-3 сервера",
         value="\n".join(top_lines) if top_lines else "*Немає даних*",
         inline=False
     )
@@ -690,11 +710,16 @@ async def on_presence_update(before, after):
 
     changed = False
 
-    # Вийшов з гри — записуємо час
+    # Вийшов з гри — записуємо час тільки якщо сесія ще існує
     if before_game:
         if after.id in game_sessions and game_sessions[after.id]["game"] == before_game:
             duration = datetime.now().timestamp() - game_sessions[after.id]["start_time"]
-            add_voice_time(after.id, duration, before_game)
+            # Записуємо тільки ігровий час (без войс-часу щоб не дублювати)
+            s = load_stats()
+            uid = str(after.id)
+            s.setdefault("games", {}).setdefault(uid, {})[before_game] = \
+                s["games"][uid].get(before_game, 0) + duration
+            save_stats(s)
             del game_sessions[after.id]
 
         if before_game in active_games:
@@ -732,8 +757,9 @@ async def on_ready():
     await bot.tree.sync()
     load_message_ids()
 
-    # Скануємо активні ігри при запуску
+    # Скануємо активні ігри при запуску + стартуємо game_sessions
     active_games.clear()
+    game_sessions.clear()
     for guild in bot.guilds:
         if not GLOBAL_SETTINGS["monitoring"]:
             continue
@@ -742,6 +768,11 @@ async def on_ready():
                 continue
             game = get_game_name(member)
             if game:
+                # Стартуємо сесію гри для всіх хто вже грає
+                game_sessions[member.id] = {
+                    "game": game,
+                    "start_time": datetime.now().timestamp()
+                }
                 if game not in active_games:
                     active_games[game] = {"players": [member.display_name], "start_time": datetime.now().timestamp()}
                 elif member.display_name not in active_games[game]["players"]:
