@@ -25,7 +25,7 @@ GLOBAL_SETTINGS = {
     "monitoring": True,
     "voice_guard": True,
     "voice_stats": True,
-    "version": "v3.4.1",
+    "version": "v3.4.2",
     "image_url": "https://cdn.discordapp.com/avatars/1492662597357404211/a_4bf48afaac3798695e46c007ce568803.gif?size=1024"
 }
 
@@ -341,12 +341,19 @@ async def daily_report():
 # --- 7. МОНІТОРИНГ ІГОР ---
 
 def get_game_name(member):
-    """Шукає гру в усіх активностях юзера (всеїдний режим)"""
+    """Максимально всеїдна функція: ігнорує статуси, бере всі ігри та стріми"""
     if not member.activities:
         return None
+        
     for act in member.activities:
-        if act.type == discord.ActivityType.playing:
+        # Пропускаємо Custom Status та прослуховування Spotify
+        if isinstance(act, discord.CustomActivity) or act.name == "Spotify":
+            continue
+            
+        # Якщо це будь-яка інша активність (гра, стрім) і вона має назву — беремо її
+        if hasattr(act, 'name') and act.name:
             return act.name
+            
     return None
 
 def build_games_embed() -> discord.Embed:
@@ -441,7 +448,6 @@ async def on_presence_update(before, after):
         if not players:
             if before_game in active_games:
                 del active_games[before_game]
-                print(f"GAME REMOVED: {before_game}")
         else:
             active_games[before_game]["players"] = players
         changed = True
@@ -453,16 +459,12 @@ async def on_presence_update(before, after):
 
         if len(players_in_game) >= 1:
             if after_game not in active_games:
-                # Нова гра
                 active_games[after_game] = {
                     "players": players_in_game,
                     "start_time": datetime.now().timestamp()
                 }
-                print(f"GAME ADDED: {after_game} | {players_in_game}")
             else:
-                # Оновлюємо список гравців
                 active_games[after_game]["players"] = players_in_game
-                print(f"GAME UPDATED: {after_game} | {players_in_game}")
             changed = True
 
     if changed:
@@ -472,12 +474,40 @@ async def on_presence_update(before, after):
 
 @bot.event
 async def on_ready():
-    global voice_start_times
+    global voice_start_times, active_games
     print(f'--- Midnight {GLOBAL_SETTINGS["version"]} ONLINE ---')
 
     await bot.tree.sync()
 
-    # Відновлюємо збережені сесії
+    # --- СКАНУВАННЯ ІГОР ПРИ ЗАПУСКУ ---
+    # Це вирішує проблему амнезії, коли бот не бачив гравців, що ВЖЕ грали до запуску
+    active_games.clear()
+    for guild in bot.guilds:
+        if not GLOBAL_SETTINGS["monitoring"]:
+            continue
+            
+        changed_games = False
+        for member in guild.members:
+            if member.bot:
+                continue
+                
+            game = get_game_name(member)
+            if game:
+                if game not in active_games:
+                    active_games[game] = {
+                        "players": [member.display_name],
+                        "start_time": datetime.now().timestamp()
+                    }
+                else:
+                    if member.display_name not in active_games[game]["players"]:
+                        active_games[game]["players"].append(member.display_name)
+                changed_games = True
+        
+        # Оновлюємо табло один раз для всього серверу при старті
+        if changed_games:
+            bot.loop.create_task(update_games_message(guild))
+
+    # --- ВІДНОВЛЕННЯ СЕСІЙ ВОЙСУ ---
     saved_sessions = load_sessions()
 
     for guild in bot.guilds:
@@ -500,7 +530,7 @@ async def on_ready():
     await asyncio.sleep(2)
     await join_voice_safe()
 
-    print(f"READY: відстежую {len(voice_start_times)} юзерів у войсі")
+    print(f"READY: відстежую {len(voice_start_times)} юзерів у войсі та {len(active_games)} активних ігор")
 
 if __name__ == "__main__":
     keep_alive()
