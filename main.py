@@ -592,7 +592,7 @@ def build_fame_embed(guild) -> discord.Embed:
         top_lines.append(f"{medals[i]} {name}{streak_emoji(uid)} — `{format_time(sec)}`")
 
     embed.add_field(
-        name="👑 Топ-3 сервера",
+        name="👑 Топ-3 Voice ",
         value="\n".join(top_lines) if top_lines else "*Немає даних*",
         inline=False
     )
