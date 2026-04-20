@@ -434,6 +434,8 @@ async def help_cmd(interaction: discord.Interaction):
         value="`/say` — Озвучити текст у голосовому каналі",
         inline=False
     )
+    embed.add_field(
+        name="⚙️ Система",
         value=(
             "`/ping` — Затримка та аптайм\n"
             "`/midnight_info` — Статус модулів\n"
