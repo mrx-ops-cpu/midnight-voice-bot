@@ -25,7 +25,7 @@ GLOBAL_SETTINGS = {
     "monitoring": True,
     "voice_guard": True,
     "voice_stats": True,
-    "version": "v3.3.2",
+    "version": "v3.3.3",
     "image_url": "https://cdn.discordapp.com/avatars/1492662597357404211/a_4bf48afaac3798695e46c007ce568803.gif?size=1024"
 }
 
@@ -54,21 +54,21 @@ def save_stats(data):
         with open(STATS_FILE, "w") as f: json.dump(data, f, indent=4)
     except: pass
 
-# ОНОВЛЕНО: Тепер враховуємо секунди
 def format_time(seconds):
     seconds = int(seconds)
-    h = seconds // 3600
-    m = (seconds % 3600) // 60
-    s = seconds % 60
-    
+    h, m, s = seconds // 3600, (seconds % 3600) // 60, seconds % 60
     res = []
     if h > 0: res.append(f"{h}г")
     if m > 0: res.append(f"{m}хв")
-    if s > 0 or not res: res.append(f"{s}с") # Показуємо секунди, якщо хвилин/годин немає
+    if s > 0 or not res: res.append(f"{s}с")
     return " ".join(res)
 
+# --- ІНТЕНТИ ТА ІНІЦІАЛІЗАЦІЯ ---
 intents = discord.Intents.all()
-bot = commands.Bot(command_prefix='!', intents=intents)
+intents.members = True
+intents.presences = True
+
+bot = commands.Bot(command_prefix='!', intents=intents, chunk_guilds_at_startup=True)
 
 # --- 3. ФУНКЦІЯ АВТОНОМНОГО ВХОДУ ---
 async def join_voice_safe():
@@ -117,19 +117,28 @@ async def set_stats(interaction: discord.Interaction, стан: app_commands.Cho
 @app_commands.choices(період=[app_commands.Choice(name="Весь час", value="total"), app_commands.Choice(name="Сьогодні", value="daily")])
 async def leaderboard(interaction: discord.Interaction, період: app_commands.Choice[str]):
     if not GLOBAL_SETTINGS["voice_stats"]: return await interaction.response.send_message("❌ Вимкнено", ephemeral=True)
+    
     stats_data = load_stats().get(період.value, {})
     sorted_s = sorted(stats_data.items(), key=lambda x: x[1], reverse=True)[:10]
+    
     res = ""
     for i, (u_id, sec) in enumerate(sorted_s, 1):
-        m = interaction.guild.get_member(int(u_id))
-        name = m.display_name if m else f"Гравець ({u_id})"
+        member = interaction.guild.get_member(int(u_id))
+        if not member:
+            try: member = await bot.fetch_user(int(u_id))
+            except: pass
+        name = member.display_name if hasattr(member, 'display_name') else (member.name if member else f"ID: {u_id}")
         res += f"**{i}.** {name} — `{format_time(sec)}`\n"
-    await interaction.response.send_message(embed=discord.Embed(title=f"🏆 Топ {період.name}", description=res or "Даних поки немає", color=0xf1c40f))
+    
+    await interaction.response.send_message(embed=discord.Embed(title=f"🏆 Топ {період.name}", description=res or "Пусто", color=0xf1c40f))
 
 # --- 5. ЛОГІКА ПОДІЙ ---
 
 @bot.event
 async def on_voice_state_update(member, before, after):
+    # Лог для відладки
+    print(f"DEBUG: {member.name} {before.channel} -> {after.channel}")
+
     if member.id == bot.user.id and before.channel and not after.channel:
         if GLOBAL_SETTINGS["voice_guard"]:
             await asyncio.sleep(5)
@@ -137,16 +146,12 @@ async def on_voice_state_update(member, before, after):
 
     if member.bot or not GLOBAL_SETTINGS["voice_stats"]: return
     
-    # Вхід у канал
     if not before.channel and after.channel:
         voice_start_times[member.id] = datetime.now().timestamp()
-        
-    # Вихід із каналу
     elif before.channel and not after.channel:
         if member.id in voice_start_times:
             duration = datetime.now().timestamp() - voice_start_times[member.id]
             del voice_start_times[member.id]
-            
             s = load_stats()
             uid = str(member.id)
             s["total"][uid] = s["total"].get(uid, 0) + duration
