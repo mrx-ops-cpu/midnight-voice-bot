@@ -337,11 +337,7 @@ async def leaderboard(interaction: discord.Interaction, період: app_comman
     medals   = ["🥇", "🥈", "🥉"]
     res = ""
     for i, (u_id, sec) in enumerate(sorted_s):
-        member = interaction.guild.get_member(int(u_id))
-        if not member:
-            try: member = await bot.fetch_user(int(u_id))
-            except: pass
-        name  = member.display_name if hasattr(member, 'display_name') else (member.name if member else f"ID:{u_id}")
+        name = get_display_name(u_id, interaction.guild)
         medal = medals[i] if i < 3 else f"**{i+1}.**"
         res  += f"{medal} {name}{streak_emoji(u_id)} — `{format_time(sec)}`\n"
 
@@ -510,8 +506,8 @@ async def daily_report():
     medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
     lines  = []
     for i, (uid, sec) in enumerate(top):
-        user = bot.get_user(int(uid))
-        name = user.name if user else f"User {uid}"
+        guild = bot.guilds[0] if bot.guilds else None
+        name  = get_display_name(uid, guild)
         lines.append(f"{medals[i]} {name}{streak_emoji(uid)} — {format_time(sec)}")
 
     embed = discord.Embed(
@@ -563,6 +559,19 @@ def build_live_embed() -> discord.Embed:
     embed.set_footer(text="🔴 Live • Оновлюється автоматично")
     return embed
 
+def get_display_name(uid: str, guild) -> str:
+    """Повертає серверний нік (display_name). Якщо не знайдено — глобальне ім'я."""
+    try:
+        member = guild.get_member(int(uid)) if guild else None
+        if member:
+            return member.display_name
+        user = bot.get_user(int(uid))
+        if user:
+            return user.display_name
+    except:
+        pass
+    return f"User {uid}"
+
 def build_fame_embed(guild) -> discord.Embed:
     """Повідомлення №2 — Зал Слави"""
     embed = discord.Embed(
@@ -583,8 +592,7 @@ def build_fame_embed(guild) -> discord.Embed:
     medals = ["🥇", "🥈", "🥉"]
     top_lines = []
     for i, (uid, sec) in enumerate(top3):
-        user = bot.get_user(int(uid))
-        name = user.name if user else f"ID:{uid}"
+        name = get_display_name(uid, guild)
         top_lines.append(f"{medals[i]} {name}{streak_emoji(uid)} — `{format_time(sec)}`")
 
     embed.add_field(
@@ -598,8 +606,7 @@ def build_fame_embed(guild) -> discord.Embed:
     if kings:
         king_lines = []
         for game, (uid, sec) in sorted(kings.items()):
-            user  = bot.get_user(int(uid))
-            name  = user.name if user else f"ID:{uid}"
+            name  = get_display_name(uid, guild)
             title = get_title(game)
             king_lines.append(f"{title}\n└ {name} — `{format_time(sec)}`")
         embed.add_field(name="🎖️ Королі ігор", value="\n".join(king_lines), inline=False)
@@ -714,8 +721,8 @@ async def on_presence_update(before, after):
             changed = True
 
     if changed:
-        await update_live_message(guild)
         await update_fame_message(guild)
+        await update_live_message(guild)
 
 # ============================================================
 # 11. СТАРТ
@@ -744,8 +751,8 @@ async def on_ready():
                 elif member.display_name not in active_games[game]["players"]:
                     active_games[game]["players"].append(member.display_name)
 
-        bot.loop.create_task(update_live_message(guild))
         bot.loop.create_task(update_fame_message(guild))
+        bot.loop.create_task(update_live_message(guild))
 
     # Відновлюємо сесії войсу
     saved = load_sessions()
