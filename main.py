@@ -308,8 +308,11 @@ async def play_tts(text: str, guild: discord.Guild):
         while vc.is_playing():
             await asyncio.sleep(0.5)
 
-        # Програємо
-        vc.play(discord.FFmpegPCMAudio(tmp.name))
+        # Програємо з явним шляхом до FFmpeg
+        ffmpeg_opts = {
+            'executable': '/usr/bin/ffmpeg'
+        }
+        vc.play(discord.FFmpegPCMAudio(tmp.name, executable='/usr/bin/ffmpeg'))
 
         # Чекаємо завершення і видаляємо файл
         while vc.is_playing():
