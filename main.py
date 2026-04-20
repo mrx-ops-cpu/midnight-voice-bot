@@ -222,4 +222,4 @@ async def on_ready():
 
 if __name__ == "__main__":
     keep_alive()
-    bot.run("ТВІЙ_ТОКЕН")
+    bot.run("MTQ5MjY2MjU5NzM1NzQwNDIxMQ.GYOjct.FXboTEBC3CQDhARJM4MJSSQJGtVkhp6yQSAlks")
