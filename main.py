@@ -8,7 +8,7 @@ import asyncio
 import json
 from datetime import datetime, time, timezone
 
-# --- 1. ВЕБ-СЕРВЕР ДЛЯ ПІДТРИМКИ ЖИТТЄДІЯЛЬНОСТІ ---
+# --- 1. ВЕБ-СЕРВЕР ДЛЯ RAILWAY ---
 app = Flask('')
 @app.route('/')
 def home(): return "MIDNIGHT SYSTEM ONLINE"
@@ -20,24 +20,24 @@ def run():
 def keep_alive():
     t = Thread(target=run, daemon=True); t.start()
 
-# --- 2. НАЛАШТУВАННЯ ТА БАЗА ДАНИХ (VOLUME) ---
+# --- 2. НАЛАШТУВАННЯ ТА ПАМ'ЯТЬ (VOLUME) ---
 GLOBAL_SETTINGS = {
-    "monitoring": True,    # Анонси ігор (від 3-х осіб)
-    "voice_guard": True,   # Авто-вхід бота у голосовий канал
-    "voice_stats": True,   # Збір статистики часу
-    "version": "v3.2",
+    "monitoring": True,    # Анонси ігор
+    "voice_guard": True,   # Авто-вхід бота у войс
+    "voice_stats": True,   # Збір статистики
+    "version": "v3.3",
     "image_url": "https://cdn.discordapp.com/avatars/1492662597357404211/a_4bf48afaac3798695e46c007ce568803.gif?size=1024"
 }
 
-# ШЛЯХ ДО VOLUME (Має збігатися з Mount Path у Railway)
+# Шлях до твого підключеного Volume
 DATA_DIR = "/app/data"
 STATS_FILE = os.path.join(DATA_DIR, "voice_stats.json")
 
-# Створюємо папку для даних, якщо її ще немає
+# Авто-створення папки на диску
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR, exist_ok=True)
 
-# ТВОЇ ID (Перевір їх ще раз)
+# Твої ID
 VOICE_ID = 1458906259922354277 
 GAMING_LOG_ID = 1493054931224105070 
 
@@ -45,6 +45,7 @@ active_sessions = {}
 pending_announcements = set()
 voice_start_times = {}
 
+# Робота з базою даних
 def load_stats():
     if os.path.exists(STATS_FILE):
         try:
@@ -54,10 +55,8 @@ def load_stats():
 
 def save_stats(data):
     try:
-        with open(STATS_FILE, "w") as f:
-            json.dump(data, f, indent=4)
-    except Exception as e:
-        print(f"Помилка збереження: {e}")
+        with open(STATS_FILE, "w") as f: json.dump(data, f, indent=4)
+    except: pass
 
 def format_time(seconds):
     h = int(seconds // 3600)
@@ -68,11 +67,32 @@ def format_time(seconds):
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# --- 3. КОМАНДИ КЕРУВАННЯ ---
+# --- 3. ФУНКЦІЯ АВТОНОМНОГО ВХОДУ ---
+async def join_voice_safe():
+    if not GLOBAL_SETTINGS["voice_guard"]: return
+    
+    channel = bot.get_channel(VOICE_ID)
+    if not channel:
+        print(f"❌ Канал {VOICE_ID} не знайдено.")
+        return
 
-@bot.tree.command(name="midnight_info", description="Системна інформація та статус модулів")
+    # Перевірка, чи ми вже підключені
+    current_vc = discord.utils.get(bot.voice_clients, guild=channel.guild)
+    
+    if not current_vc:
+        try:
+            await channel.connect(timeout=20.0, reconnect=True)
+            print(f"✅ Успішно зайшов у канал: {channel.name}")
+        except Exception as e:
+            print(f"❌ Помилка входу: {e}")
+    elif current_vc.channel.id != VOICE_ID:
+        await current_vc.move_to(channel)
+
+# --- 4. СЛЕШ-КОМАНДИ ---
+
+@bot.tree.command(name="midnight_info", description="Статус системи та модулів")
 async def midnight_info(interaction: discord.Interaction):
-    embed = discord.Embed(title="🌑 Midnight Bot | System Control", color=0x2b2d31)
+    embed = discord.Embed(title="🌑 Midnight Bot | System Status", color=0x2b2d31)
     
     m_status = "🟢 ON" if GLOBAL_SETTINGS["monitoring"] else "🔴 OFF"
     v_status = "🟢 ON" if GLOBAL_SETTINGS["voice_guard"] else "🔴 OFF"
@@ -82,79 +102,45 @@ async def midnight_info(interaction: discord.Interaction):
     embed.add_field(name="🎙️ Voice Guardian", value=f"Статус: `{v_status}`", inline=True)
     embed.add_field(name="📊 Voice Analytics", value=f"Статус: `{s_status}`", inline=True)
     
-    embed.add_field(name="🛠️ Команди", value=(
-        "`/set_monitoring` • `/set_voice` • `/set_stats`\n"
-        "`/leaderboard` — Рейтинг активності"
-    ), inline=False)
-    
     embed.set_thumbnail(url=GLOBAL_SETTINGS["image_url"])
-    embed.set_footer(text=f"Midnight System {GLOBAL_SETTINGS['version']} | Дані в безпеці")
+    embed.set_footer(text=f"Midnight {GLOBAL_SETTINGS['version']} | Persistent Storage Active")
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="set_stats")
-@app_commands.choices(стан=[app_commands.Choice(name="Увімкнути", value="true"), app_commands.Choice(name="Вимкнути", value="false")])
-async def set_stats(interaction: discord.Interaction, стан: app_commands.Choice[str]):
-    GLOBAL_SETTINGS["voice_stats"] = (стан.value == "true")
-    await interaction.response.send_message(f"📊 Статистика: **{'Увімкнено' if GLOBAL_SETTINGS['voice_stats'] else 'Вимкнено'}**", ephemeral=True)
-
-@bot.tree.command(name="set_monitoring")
-@app_commands.choices(стан=[app_commands.Choice(name="Увімкнути", value="true"), app_commands.Choice(name="Вимкнути", value="false")])
-async def set_monitoring(interaction: discord.Interaction, стан: app_commands.Choice[str]):
-    GLOBAL_SETTINGS["monitoring"] = (стан.value == "true")
-    await interaction.response.send_message(f"📡 Моніторинг ігор: **{'Увімкнено' if GLOBAL_SETTINGS['monitoring'] else 'Вимкнено'}**", ephemeral=True)
-
-@bot.tree.command(name="set_voice")
-@app_commands.choices(стан=[app_commands.Choice(name="Увімкнути", value="true"), app_commands.Choice(name="Вимкнути", value="false")])
-async def set_voice(interaction: discord.Interaction, стан: app_commands.Choice[str]):
-    GLOBAL_SETTINGS["voice_guard"] = (стан.value == "true")
-    if not GLOBAL_SETTINGS["voice_guard"]:
-        for vc in bot.voice_clients: await vc.disconnect(force=True)
-    await interaction.response.send_message(f"🎙️ Voice Guardian: **{'Увімкнено' if GLOBAL_SETTINGS['voice_guard'] else 'Вимкнено'}**", ephemeral=True)
-
-# --- 4. ЛІДЕРБОРД (ДЕНЬ / ВЕСЬ ЧАС) ---
-
-@bot.tree.command(name="leaderboard", description="Топ активності у голосових каналах")
+@bot.tree.command(name="leaderboard", description="Топ активності")
 @app_commands.choices(період=[
     app_commands.Choice(name="Весь час", value="total"),
     app_commands.Choice(name="Сьогодні", value="daily")
 ])
 async def leaderboard(interaction: discord.Interaction, період: app_commands.Choice[str]):
     if not GLOBAL_SETTINGS["voice_stats"]:
-        return await interaction.response.send_message("❌ Модуль статистики вимкнено.", ephemeral=True)
+        return await interaction.response.send_message("❌ Статистика вимкнена.", ephemeral=True)
 
-    stats = load_stats()
-    target_data = stats.get(період.value, {})
-    sorted_stats = sorted(target_data.items(), key=lambda x: x[1], reverse=True)[:10]
+    stats = load_stats().get(період.value, {})
+    sorted_stats = sorted(stats.items(), key=lambda x: x[1], reverse=True)[:10]
     
-    title_type = "За весь час" if період.value == "total" else "За сьогодні"
-    embed = discord.Embed(title="🏆 Midnight Voice Leaderboard", color=0xf1c40f)
-    
-    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+    embed = discord.Embed(title=f"🏆 Топ активності ({період.name})", color=0xf1c40f)
     leader_text = ""
     for i, (u_id, sec) in enumerate(sorted_stats, 1):
         member = interaction.guild.get_member(int(u_id))
-        name = member.display_name if member else f"Гравець"
-        prefix = medals.get(i, f"**{i}.**")
-        leader_text += f"{prefix} {name} — `{format_time(sec)}`\n"
+        name = member.display_name if member else f"ID: {u_id}"
+        leader_text += f"**{i}.** {name} — `{format_time(sec)}`\n"
     
-    embed.add_field(name=f"📊 Рейтинг: {title_type}", value=leader_text or "Даних поки немає", inline=False)
-    embed.set_footer(text=f"Дані зберігаються на Volume")
+    embed.description = leader_text or "Даних поки немає."
     await interaction.response.send_message(embed=embed)
 
-# --- 5. ЛОГІКА ТА ЗБЕРЕЖЕННЯ ---
+# --- 5. ЛОГІКА ПОДІЙ ---
 
 @bot.event
 async def on_voice_state_update(member, before, after):
-    # Авто-вхід бота
+    # Якщо бота вигнали - він повертається
     if member.id == bot.user.id and before.channel and not after.channel:
         if GLOBAL_SETTINGS["voice_guard"]:
             await asyncio.sleep(5)
-            ch = bot.get_channel(VOICE_ID)
-            if ch: await ch.connect()
+            await join_voice_safe()
 
     if member.bot or not GLOBAL_SETTINGS["voice_stats"]: return
 
-    # Трекінг часу
+    # Трекінг часу для статистики
     if not before.channel and after.channel:
         voice_start_times[member.id] = datetime.now().timestamp()
     elif before.channel and not after.channel:
@@ -170,18 +156,17 @@ async def on_voice_state_update(member, before, after):
 @tasks.loop(time=time(hour=0, minute=0, tzinfo=timezone.utc))
 async def daily_report():
     if not GLOBAL_SETTINGS["voice_stats"]: return
-    ch = bot.get_channel(GAMING_LOG_ID)
-    s = load_stats()
+    ch, s = bot.get_channel(GAMING_LOG_ID), load_stats()
     if not s["daily"] or not ch: return
     
     top = sorted(s["daily"].items(), key=lambda x: x[1], reverse=True)[:5]
-    msg = "📊 **Підсумки дня в голосових каналах:**\n"
+    msg = "📊 **Підсумки дня:**\n"
     for i, (uid, sec) in enumerate(top, 1):
         u = bot.get_user(int(uid))
         msg += f"{i}. **{u.display_name if u else uid}** — {format_time(sec)}\n"
     
     await ch.send(msg)
-    s["daily"] = {}
+    s["daily"] = {} # Очищення дня
     save_stats(s)
 
 # --- 6. МОНІТОРИНГ ІГОР ---
@@ -197,7 +182,7 @@ async def announce_game(guild_id, game_name):
         ch = bot.get_channel(GAMING_LOG_ID)
         if ch:
             names = [m.display_name for m in players]
-            content = f"🎮 **Бачу нову катку!**\n**Гравці:** {', '.join(names)}\n**Гра:** {game_name}"
+            content = f"🎮 **Нова катка!**\n**Гравці:** {', '.join(names)}\n**Гра:** {game_name}"
             try:
                 if isinstance(ch, discord.ForumChannel): await ch.create_thread(name=f"🎮 {game_name}", content=content)
                 else: await ch.send(content)
@@ -214,11 +199,18 @@ async def on_presence_update(before, after):
                 pending_announcements.add(name)
                 asyncio.create_task(announce_game(after.guild.id, name))
 
+# --- 7. ЗАПУСК ---
+
 @bot.event
 async def on_ready():
-    print(f'--- Midnight ONLINE | Volume: {STATS_FILE} ---')
+    print(f'--- Midnight {GLOBAL_SETTINGS["version"]} ONLINE ---')
+    print(f'--- Папка даних: {DATA_DIR} ---')
     await bot.tree.sync()
     if not daily_report.is_running(): daily_report.start()
+    
+    # Автоматичний вхід при включенні
+    await asyncio.sleep(2)
+    await join_voice_safe()
 
 if __name__ == "__main__":
     keep_alive()
