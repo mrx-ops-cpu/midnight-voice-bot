@@ -618,7 +618,48 @@ async def daily_report():
     save_stats(s)
     print("DAILY RESET done")
 
-def get_game_name(member):
+@tasks.loop(minutes=10)
+async def periodic_save():
+    """
+    Кожні 10 хвилин зберігає поточні войс-сесії та ігрові сесії в базу.
+    НЕ скидає таймери — просто додає накопичений час.
+    Це вирішує проблему втрати часу при рестарті бота.
+    """
+    if not GLOBAL_SETTINGS["voice_stats"]:
+        return
+
+    now = datetime.now().timestamp()
+    saved_count = 0
+
+    for user_id, start_time in list(voice_start_times.items()):
+        duration = now - start_time
+        if duration < 60:  # Менше хвилини — не зберігаємо
+            continue
+
+        game = game_sessions.get(user_id, {}).get("game")
+
+        s   = load_stats()
+        uid = str(user_id)
+        s["total"][uid] = s["total"].get(uid, 0) + duration
+        s["daily"][uid] = s["daily"].get(uid, 0) + duration
+        if game:
+            s.setdefault("games", {}).setdefault(uid, {})[game] = \
+                s["games"][uid].get(game, 0) + duration
+        save_stats(s)
+
+        # Оновлюємо таймер щоб не рахувати двічі
+        voice_start_times[user_id] = now
+
+        # Оновлюємо ігровий таймер
+        if user_id in game_sessions:
+            game_sessions[user_id]["start_time"] = now
+
+        saved_count += 1
+
+    if saved_count > 0:
+        print(f"PERIODIC SAVE: збережено {saved_count} сесій")
+
+
     if not member.activities:
         return None
     for act in member.activities:
@@ -775,6 +816,7 @@ async def on_ready():
             if game:
                 game_sessions[member.id] = {"game": game, "start_time": datetime.now().timestamp()}
                 if game not in active_games:
+                    # start_time = зараз, бо ми не знаємо коли почали
                     active_games[game] = {"players": [member.display_name], "start_time": datetime.now().timestamp()}
                 elif member.display_name not in active_games[game]["players"]:
                     active_games[game]["players"].append(member.display_name)
@@ -791,6 +833,8 @@ async def on_ready():
     save_sessions()
     if not daily_report.is_running():
         daily_report.start()
+    if not periodic_save.is_running():
+        periodic_save.start()
     await asyncio.sleep(2)
     await join_voice_safe()
     print(f"READY: {len(voice_start_times)} у войсі | {len(active_games)} активних ігор")
