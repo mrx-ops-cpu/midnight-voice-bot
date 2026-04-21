@@ -32,7 +32,7 @@ GLOBAL_SETTINGS = {
     "monitoring": True,
     "voice_guard": True,
     "voice_stats": True,
-    "version": "v4.0.0",
+    "version": "v4.1.0", # Оновив версію
     "image_url": "https://cdn.discordapp.com/avatars/1492662597357404211/a_4bf48afaac3798695e46c007ce568803.gif?size=1024",
     "start_time": datetime.now(timezone.utc)
 }
@@ -89,15 +89,6 @@ fame_message_id = None  # Повідомлення №2 — Зал Слави
 # ============================================================
 
 def load_stats() -> dict:
-    """
-    Структура файлу:
-    {
-      "total":   {uid: seconds},
-      "daily":   {uid: seconds},
-      "games":   {uid: {game_name: seconds}},
-      "streaks": {uid: {"last_date": "YYYY-MM-DD", "count": int}}
-    }
-    """
     if os.path.exists(STATS_FILE):
         try:
             with open(STATS_FILE, "r") as f:
@@ -157,11 +148,6 @@ def save_message_ids():
 # ============================================================
 
 def format_time(seconds: float) -> str:
-    """
-    < 1 хв   -> "< 1хв"
-    < 60 хв  -> "45хв"
-    >= 60 хв -> "2г 15хв"
-    """
     seconds = max(0, int(seconds))
     total_minutes = seconds // 60
     if total_minutes == 0:
@@ -175,7 +161,6 @@ def format_time(seconds: float) -> str:
     return f"{h}г {m}хв"
 
 def update_streak(uid: str):
-    """Оновлює стрик юзера. Викликати при будь-якій активності."""
     s = load_stats()
     today = date.today().isoformat()
     streaks = s.setdefault("streaks", {})
@@ -210,7 +195,6 @@ def streak_emoji(uid: str) -> str:
     return f" 🔥{streak}" if streak >= 3 else ""
 
 def add_voice_time(member_id: int, duration: float, game: str = None):
-    """Записує час войсу і (опційно) час конкретної гри."""
     if duration <= 0:
         return
     s   = load_stats()
@@ -227,6 +211,20 @@ def add_voice_time(member_id: int, duration: float, game: str = None):
     update_streak(uid)
     print(f"STATS +{format_time(duration)} uid={member_id} game={game}")
 
+def add_game_only_time(member_id: int, duration: float, game: str):
+    """Записує тільки ігровий час у базу, навіть якщо юзер не у войсі."""
+    if duration <= 0 or not game:
+        return
+    s = load_stats()
+    uid = str(member_id)
+    
+    user_games = s.setdefault("games", {}).setdefault(uid, {})
+    user_games[game] = user_games.get(game, 0) + duration
+    
+    save_stats(s)
+    update_streak(uid)
+    print(f"GAME STATS: +{format_time(duration)} uid={member_id} game={game}")
+
 def get_current_session(user_id: int) -> float:
     if user_id in voice_start_times:
         return datetime.now().timestamp() - voice_start_times[user_id]
@@ -241,7 +239,7 @@ def get_daily_time(user_id: int) -> float:
     return s["daily"].get(str(user_id), 0) + get_current_session(user_id)
 
 def get_game_kings() -> dict:
-    """Повертає {game_name: (uid, seconds)} — лідер кожної гри."""
+    """Повертає {game_name: (uid, seconds)} — лідер кожної гри для команди /stats."""
     s = load_stats()
     kings = {}
     for uid, games in s.get("games", {}).items():
@@ -249,6 +247,27 @@ def get_game_kings() -> dict:
             if game not in kings or sec > kings[game][1]:
                 kings[game] = (uid, sec)
     return kings
+
+def get_fame_stats(limit_games=6, limit_players=3) -> dict:
+    """Повертає найпопулярніші ігри та Топ-X гравців у кожній для Залу Слави."""
+    s = load_stats()
+    games_data = {}
+    
+    for uid, user_games in s.get("games", {}).items():
+        for game, sec in user_games.items():
+            if game not in games_data:
+                games_data[game] = {"total_time": 0, "players": []}
+            games_data[game]["total_time"] += sec
+            games_data[game]["players"].append((uid, sec))
+
+    sorted_games = sorted(games_data.items(), key=lambda x: x[1]["total_time"], reverse=True)
+    
+    result = {}
+    for game, data in sorted_games[:limit_games]:
+        top_players = sorted(data["players"], key=lambda x: x[1], reverse=True)[:limit_players]
+        result[game] = top_players
+
+    return result
 
 def get_title(game: str) -> str:
     return TITLES.get(game, DEFAULT_TITLE.format(game=game))
@@ -282,18 +301,15 @@ async def join_voice_safe():
         await vc.move_to(channel)
 
 async def play_tts(text: str, guild: discord.Guild):
-    """Генерує TTS і програє у войсі. Бот залишається в каналі після."""
     try:
         from gtts import gTTS
         import tempfile
 
-        # Генеруємо mp3 у тимчасовий файл
         tts = gTTS(text=text, lang="uk")
         tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
         tts.save(tmp.name)
         tmp.close()
 
-        # Знаходимо голосовий клієнт бота
         vc = discord.utils.get(bot.voice_clients, guild=guild)
         if not vc:
             await join_voice_safe()
@@ -304,17 +320,14 @@ async def play_tts(text: str, guild: discord.Guild):
             print("ERROR play_tts: бот не в войсі")
             return
 
-        # Чекаємо якщо вже щось грає
         while vc.is_playing():
             await asyncio.sleep(0.5)
 
-        # Програємо з явним шляхом до FFmpeg
         ffmpeg_opts = {
             'executable': '/usr/bin/ffmpeg'
         }
         vc.play(discord.FFmpegPCMAudio(tmp.name, executable='/usr/bin/ffmpeg'))
 
-        # Чекаємо завершення і видаляємо файл
         while vc.is_playing():
             await asyncio.sleep(0.5)
 
@@ -413,7 +426,7 @@ async def ping_cmd(interaction: discord.Interaction):
     color    = 0x57F287 if latency < 100 else (0xFEE75C if latency < 200 else 0xED4245)
 
     embed = discord.Embed(title="🏓 Pong!", color=color)
-    embed.add_field(name="📡 Затримка", value=f"`{latency}ms`",       inline=True)
+    embed.add_field(name="📡 Затримка", value=f"`{latency}ms`",        inline=True)
     embed.add_field(name="⏱️ Аптайм",  value=f"`{hours}г {mins}хв`", inline=True)
     embed.add_field(name="🔢 Версія",  value=f"`{GLOBAL_SETTINGS['version']}`", inline=True)
     embed.set_footer(text=midnight_footer())
@@ -474,6 +487,8 @@ async def say_cmd(interaction: discord.Interaction, текст: str):
         ephemeral=True
     )
     asyncio.create_task(play_tts(текст, interaction.guild))
+
+@bot.tree.command(name="midnight_info", description="Статус системи")
 async def midnight_info(interaction: discord.Interaction):
     embed = discord.Embed(title="🌑 Midnight Bot | Status", color=0x2b2d31)
     for label, key in [("🎮 Game Monitor", "monitoring"), ("🎙️ Voice Guardian", "voice_guard"), ("📊 Voice Analytics", "voice_stats")]:
@@ -514,7 +529,6 @@ async def set_stats(interaction: discord.Interaction, стан: app_commands.Cho
 async def on_voice_state_update(member, before, after):
     print(f"VOICE: {member.name} | {before.channel} -> {after.channel}")
 
-    # Voice Guard
     if member.id == bot.user.id and before.channel and not after.channel:
         if GLOBAL_SETTINGS["voice_guard"]:
             await asyncio.sleep(5)
@@ -528,30 +542,28 @@ async def on_voice_state_update(member, before, after):
 
     now = datetime.now().timestamp()
 
-    # ЗАЙШОВ
     if not before.channel and after.channel:
         voice_start_times[member.id] = now
         save_sessions()
         print(f"START: {member.name}")
 
-    # ВИЙШОВ
     elif before.channel and not after.channel:
         if member.id in voice_start_times:
             duration = now - voice_start_times.pop(member.id)
             save_sessions()
             game = game_sessions.get(member.id, {}).get("game")
             add_voice_time(member.id, duration, game)
-            # Якщо грав — видаляємо ігрову сесію (щоб не рахувати двічі в on_presence_update)
+            
+            # Якщо грав — видаляємо ігрову сесію
             if member.id in game_sessions:
                 del game_sessions[member.id]
             print(f"END: {member.name} | {format_time(duration)}")
-            # Оновлюємо Зал Слави бо змінився total час
+            
             for guild in bot.guilds:
                 if member.guild == guild:
                     asyncio.create_task(update_fame_message(guild))
                     break
 
-    # ПЕРЕЙШОВ між каналами — сесія продовжується
     elif before.channel and after.channel and before.channel.id != after.channel.id:
         print(f"SWITCH: {member.name}")
 
@@ -602,7 +614,7 @@ async def daily_report():
     print("DAILY RESET done")
 
 # ============================================================
-# 10. МОНІТОРИНГ ІГОР — два окремих повідомлення
+# 10. МОНІТОРИНГ ІГОР
 # ============================================================
 
 def get_game_name(member) -> str | None:
@@ -638,7 +650,6 @@ def build_live_embed() -> discord.Embed:
     return embed
 
 def get_display_name(uid: str, guild) -> str:
-    """Повертає серверний нік (display_name). Якщо не знайдено — глобальне ім'я."""
     try:
         member = guild.get_member(int(uid)) if guild else None
         if member:
@@ -651,7 +662,7 @@ def get_display_name(uid: str, guild) -> str:
     return f"User {uid}"
 
 def build_fame_embed(guild) -> discord.Embed:
-    """Повідомлення №2 — Зал Слави (тільки збережена статистика, незалежно від войсу)"""
+    """Повідомлення №2 — Зал Слави (Топ-6 ігор та Топ-3 сервера)"""
     embed = discord.Embed(
         title="🏛️ Зал Слави",
         color=0xf1c40f,
@@ -660,30 +671,33 @@ def build_fame_embed(guild) -> discord.Embed:
 
     s = load_stats()
 
-    # Топ-3 — тільки збережений час (без поточної сесії)
+    # Топ-3 сервера
     total_stats = s.get("total", {})
     top3   = sorted(total_stats.items(), key=lambda x: x[1], reverse=True)[:3]
     medals = ["🥇", "🥈", "🥉"]
     top_lines = []
     for i, (uid, sec) in enumerate(top3):
         name = get_display_name(uid, guild)
-        top_lines.append(f"{medals[i]} {name}{streak_emoji(uid)} — `{format_time(sec)}`")
+        top_lines.append(f"{medals[i]} **{name}**{streak_emoji(uid)} — `{format_time(sec)}`")
 
     embed.add_field(
-        name="👑 Топ-3 сервера",
+        name="👑 Абсолютні лідери сервера",
         value="\n".join(top_lines) if top_lines else "*Немає даних*",
         inline=False
     )
 
-    # Королі ігор — тільки збережений час
-    kings = get_game_kings()
-    if kings:
-        king_lines = []
-        for game, (uid, sec) in sorted(kings.items()):
-            name  = get_display_name(uid, guild)
+    # Найпопулярніші ігри сервера
+    fame_data = get_fame_stats(limit_games=6, limit_players=3)
+    if fame_data:
+        for game, players in fame_data.items():
+            king_lines = []
+            for i, (uid, sec) in enumerate(players):
+                name = get_display_name(uid, guild)
+                medal = medals[i] if i < len(medals) else "•"
+                king_lines.append(f"{medal} {name} — `{format_time(sec)}`")
+            
             title = get_title(game)
-            king_lines.append(f"{title}\n└ {name} — `{format_time(sec)}`")
-        embed.add_field(name="🎖️ Королі ігор", value="\n".join(king_lines), inline=False)
+            embed.add_field(name=f"🎖️ {title}", value="\n".join(king_lines), inline=True)
     else:
         embed.add_field(name="🎖️ Королі ігор", value="*Ще немає даних*", inline=False)
 
@@ -691,7 +705,6 @@ def build_fame_embed(guild) -> discord.Embed:
     return embed
 
 async def update_live_message(guild):
-    """Редагує або створює повідомлення №1"""
     global live_message_id
     ch = bot.get_channel(GAMING_MONITOR_ID)
     if not ch:
@@ -722,7 +735,6 @@ async def update_live_message(guild):
     save_message_ids()
 
 async def update_fame_message(guild):
-    """Редагує або створює повідомлення №2"""
     global fame_message_id
     ch = bot.get_channel(GAMING_MONITOR_ID)
     if not ch:
@@ -768,16 +780,11 @@ async def on_presence_update(before, after):
 
     changed = False
 
-    # Вийшов з гри — записуємо час тільки якщо сесія ще існує
+    # Вийшов з гри
     if before_game:
         if after.id in game_sessions and game_sessions[after.id]["game"] == before_game:
             duration = datetime.now().timestamp() - game_sessions[after.id]["start_time"]
-            # Записуємо тільки ігровий час (без войс-часу щоб не дублювати)
-            s = load_stats()
-            uid = str(after.id)
-            s.setdefault("games", {}).setdefault(uid, {})[before_game] = \
-                s["games"][uid].get(before_game, 0) + duration
-            save_stats(s)
+            add_game_only_time(after.id, duration, before_game)
             del game_sessions[after.id]
 
         if before_game in active_games:
@@ -815,7 +822,6 @@ async def on_ready():
     await bot.tree.sync()
     load_message_ids()
 
-    # Скануємо активні ігри при запуску + стартуємо game_sessions
     active_games.clear()
     game_sessions.clear()
     for guild in bot.guilds:
@@ -826,7 +832,6 @@ async def on_ready():
                 continue
             game = get_game_name(member)
             if game:
-                # Стартуємо сесію гри для всіх хто вже грає
                 game_sessions[member.id] = {
                     "game": game,
                     "start_time": datetime.now().timestamp()
@@ -836,10 +841,10 @@ async def on_ready():
                 elif member.display_name not in active_games[game]["players"]:
                     active_games[game]["players"].append(member.display_name)
 
+        # Оновлюємо Зал Слави ПЕРШИМ, Активні катки ДРУГИМИ
         bot.loop.create_task(update_fame_message(guild))
         bot.loop.create_task(update_live_message(guild))
 
-    # Відновлюємо сесії войсу
     saved = load_sessions()
     for guild in bot.guilds:
         for channel in guild.voice_channels:
