@@ -32,7 +32,7 @@ GLOBAL_SETTINGS = {
     "monitoring": True,
     "voice_guard": True,
     "voice_stats": True,
-    "version": "v4.1.0", # Оновив версію
+    "version": "v4.1.1", # Оновлена версія з новими титулами
     "image_url": "https://cdn.discordapp.com/avatars/1492662597357404211/a_4bf48afaac3798695e46c007ce568803.gif?size=1024",
     "start_time": datetime.now(timezone.utc)
 }
@@ -65,7 +65,7 @@ TITLES = {
     "Rocket League":             "🚀 Повітряний Ас",
     "Among Us":                  "🕵️ Майстер Брехні",
 }
-DEFAULT_TITLE = "🎮 Майстер {game}"
+DEFAULT_TITLE = "Майстер {game}"
 
 # Файли даних
 DATA_DIR      = "/app/data"
@@ -270,7 +270,9 @@ def get_fame_stats(limit_games=6, limit_players=3) -> dict:
     return result
 
 def get_title(game: str) -> str:
-    return TITLES.get(game, DEFAULT_TITLE.format(game=game))
+    # НОВИЙ ФОРМАТ: 🎮 Назва Гри — 👑 Титул
+    title = TITLES.get(game, DEFAULT_TITLE.format(game=game))
+    return f"🎮 {game} — {title}"
 
 def midnight_footer() -> str:
     now = datetime.now(timezone.utc).strftime("%H:%M UTC")
