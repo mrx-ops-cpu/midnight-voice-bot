@@ -7,7 +7,41 @@ import os
 import asyncio
 import json
 import shutil
+import subprocess
 from datetime import datetime, date, time, timezone, timedelta
+
+# ============================================================
+# FFmpeg — автовстановлення при старті
+# ============================================================
+def ensure_ffmpeg() -> str:
+    # Спочатку перевіряємо чи вже є
+    found = shutil.which("ffmpeg")
+    if found:
+        print(f"FFmpeg OK: {found}")
+        return found
+
+    # Встановлюємо через apt (Railway підтримує)
+    print("FFmpeg не знайдено — встановлюю через apt...")
+    try:
+        subprocess.run(
+            ["apt-get", "update", "-qq"],
+            capture_output=True, timeout=60
+        )
+        subprocess.run(
+            ["apt-get", "install", "-y", "-qq", "ffmpeg"],
+            capture_output=True, timeout=120
+        )
+        found = shutil.which("ffmpeg")
+        if found:
+            print(f"FFmpeg встановлено: {found}")
+            return found
+    except Exception as e:
+        print(f"apt failed: {e}")
+
+    print("ERROR: FFmpeg не вдалось встановити")
+    return None
+
+FFMPEG_PATH = ensure_ffmpeg()
 
 app = Flask('')
 
@@ -273,28 +307,11 @@ async def play_tts(text, guild):
         from gtts import gTTS
         import tempfile
 
-        # Шукаємо ffmpeg динамічно
-        ffmpeg = shutil.which("ffmpeg")
-        if not ffmpeg:
-            # Шукаємо в nix store (Railway)
-            import subprocess
-            try:
-                r = subprocess.run(
-                    ["find", "/nix", "-name", "ffmpeg", "-type", "f"],
-                    capture_output=True, text=True, timeout=5
-                )
-                for line in r.stdout.strip().split("\n"):
-                    if line and not line.endswith(".drv"):
-                        ffmpeg = line.strip()
-                        break
-            except:
-                pass
-        
-        if not ffmpeg:
-            print("ERROR play_tts: ffmpeg не знайдено")
+        if not FFMPEG_PATH:
+            print("ERROR play_tts: FFmpeg недоступний")
             return
 
-        print(f"TTS: ffmpeg={ffmpeg} | text={text[:30]}")
+        print(f"TTS: ffmpeg={FFMPEG_PATH} | text={text[:30]}")
 
         tts = gTTS(text=text, lang="uk")
         tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
@@ -315,7 +332,7 @@ async def play_tts(text, guild):
         while vc.is_playing():
             await asyncio.sleep(0.5)
 
-        vc.play(discord.FFmpegPCMAudio(tmp.name, executable=ffmpeg))
+        vc.play(discord.FFmpegPCMAudio(tmp.name, executable=FFMPEG_PATH))
 
         while vc.is_playing():
             await asyncio.sleep(0.5)
