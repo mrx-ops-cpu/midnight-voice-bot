@@ -621,45 +621,48 @@ async def daily_report():
 @tasks.loop(minutes=10)
 async def periodic_save():
     """
-    Кожні 10 хвилин зберігає поточні войс-сесії та ігрові сесії в базу.
-    НЕ скидає таймери — просто додає накопичений час.
-    Це вирішує проблему втрати часу при рестарті бота.
+    Кожні 10 хвилин зберігає поточні войс+ігрові сесії в базу одним записом.
+    Скидає таймери щоб не рахувати двічі при виході.
     """
     if not GLOBAL_SETTINGS["voice_stats"]:
         return
 
     now = datetime.now().timestamp()
+    users = list(voice_start_times.items())
+    if not users:
+        return
+
+    # Завантажуємо статистику ОДИН РАЗ для всіх
+    s = load_stats()
     saved_count = 0
 
-    for user_id, start_time in list(voice_start_times.items()):
+    for user_id, start_time in users:
         duration = now - start_time
-        if duration < 60:  # Менше хвилини — не зберігаємо
+        if duration < 60:
             continue
 
+        uid  = str(user_id)
         game = game_sessions.get(user_id, {}).get("game")
 
-        s   = load_stats()
-        uid = str(user_id)
         s["total"][uid] = s["total"].get(uid, 0) + duration
         s["daily"][uid] = s["daily"].get(uid, 0) + duration
         if game:
             s.setdefault("games", {}).setdefault(uid, {})[game] = \
                 s["games"][uid].get(game, 0) + duration
-        save_stats(s)
 
-        # Оновлюємо таймер щоб не рахувати двічі
+        # Скидаємо таймери щоб не рахувати двічі
         voice_start_times[user_id] = now
-
-        # Оновлюємо ігровий таймер
         if user_id in game_sessions:
             game_sessions[user_id]["start_time"] = now
 
         saved_count += 1
 
+    # Зберігаємо ОДИН РАЗ для всіх
     if saved_count > 0:
+        save_stats(s)
         print(f"PERIODIC SAVE: збережено {saved_count} сесій")
 
-
+def get_game_name(member):
     if not member.activities:
         return None
     for act in member.activities:
@@ -683,27 +686,106 @@ def build_live_embed():
     embed.set_footer(text="🔴 Live • Оновлюється автоматично")
     return embed
 
-def build_fame_embed(guild):
-    embed = discord.Embed(title="🏛️ Зал Слави", color=0xf1c40f, timestamp=datetime.now(timezone.utc))
+SHORT_TITLES = {
+    "Dota 2":                    "👑 Дота",
+    "Counter-Strike 2":          "🔫 КС",
+    "CS2":                       "🔫 КС",
+    "League of Legends":         "⚔️ ЛоЛ",
+    "Valorant":                  "🎯 Вало",
+    "Minecraft":                 "⛏️ Майн",
+    "GTA V":                     "🚗 ГТА",
+    "Grand Theft Auto V":        "🚗 ГТА",
+    "Grand Theft Auto V Legacy": "🚗 ГТА",
+    "Apex Legends":              "🏆 Апекс",
+    "EA Sports FC 26":           "⚽ Футбол",
+    "EA Sports FC 25":           "⚽ Футбол",
+    "FIFA 23":                   "⚽ Футбол",
+    "FIFA 24":                   "⚽ Футбол",
+    "RADMIR CRMP":               "🚔 Радмір",
+    "Fortnite":                  "🪂 Форт",
+    "Rocket League":             "🚀 РЛ",
+    "World of Warcraft":         "🧙 ВоВ",
+    "Call of Duty":              "🪖 КоД",
+    "Among Us":                  "🕵️ Амонг",
+    "Rust":                      "🪓 Раст",
+    "PUBG":                      "🎯 ПАБГ",
+    "PUBG: BATTLEGROUNDS":       "🎯 ПАБГ",
+}
+
+def get_short_title(game):
+    return SHORT_TITLES.get(game, f"🎮 {game[:12]}")
+
+def get_top_games(limit_games=3, limit_players=5):
+    """
+    Повертає топ ігор по сумарному часу всіх гравців.
+    {game: [(uid, seconds), ...]} відсортовано по сумарному часу гри.
+    """
     s = load_stats()
+    games_data = {}
+
+    for uid, user_games in s.get("games", {}).items():
+        for game, sec in user_games.items():
+            if game not in games_data:
+                games_data[game] = {"total": 0, "players": []}
+            games_data[game]["total"] += sec
+            games_data[game]["players"].append((uid, sec))
+
+    # Сортуємо ігри по загальному часу (спадання)
+    sorted_games = sorted(games_data.items(), key=lambda x: x[1]["total"], reverse=True)
+
+    result = {}
+    for game, data in sorted_games[:limit_games]:
+        # Сортуємо гравців по часу (спадання)
+        top_players = sorted(data["players"], key=lambda x: x[1], reverse=True)[:limit_players]
+        result[game] = {"players": top_players, "total": data["total"]}
+
+    return result
+
+def build_fame_embed(guild):
+    embed = discord.Embed(
+        title="🏛️ Зал Слави",
+        color=0xf1c40f,
+        timestamp=datetime.now(timezone.utc)
+    )
+
+    s = load_stats()
+    medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
+
+    # ── Топ-3 по загальному войс-часу ──
     total_stats = s.get("total", {})
-    top3   = sorted(total_stats.items(), key=lambda x: x[1], reverse=True)[:3]
-    medals = ["🥇", "🥈", "🥉"]
+    top3 = sorted(total_stats.items(), key=lambda x: x[1], reverse=True)[:3]
     top_lines = []
     for i, (uid, sec) in enumerate(top3):
         name = get_display_name(uid, guild)
         top_lines.append(f"{medals[i]} **{name}**{streak_emoji(uid)} — `{format_time(sec)}`")
-    embed.add_field(name="👑 Абсолютні лідери сервера", value="\n".join(top_lines) if top_lines else "*Немає даних*", inline=False)
-    fame_data = get_fame_stats(limit_games=6, limit_players=3)
-    if fame_data:
-        for game, players in fame_data.items():
-            king_lines = []
-            for i, (uid, sec) in enumerate(players):
+
+    embed.add_field(
+        name="🎙️ Топ войсу",
+        value="\n".join(top_lines) if top_lines else "*Немає даних*",
+        inline=False
+    )
+
+    # ── Топ-3 ігри по сумарному часу ──
+    top_games = get_top_games(limit_games=3, limit_players=5)
+
+    if top_games:
+        for game, data in top_games.items():
+            title     = get_short_title(game)
+            total_str = format_time(data["total"])
+            lines = []
+            for i, (uid, sec) in enumerate(data["players"]):
+                name  = get_display_name(uid, guild)
                 medal = medals[i] if i < len(medals) else "•"
-                king_lines.append(f"{medal} {get_display_name(uid, guild)} — `{format_time(sec)}`")
-            embed.add_field(name=f"🎖️ {get_title(game)}", value="\n".join(king_lines), inline=True)
+                lines.append(f"{medal} {name} — `{format_time(sec)}`")
+
+            embed.add_field(
+                name=f"{title}  ·  {total_str} загалом",
+                value="\n".join(lines),
+                inline=False
+            )
     else:
-        embed.add_field(name="🎖️ Королі ігор", value="*Ще немає даних*", inline=False)
+        embed.add_field(name="🎮 Ігри", value="*Ще немає даних*", inline=False)
+
     embed.set_footer(text="⭐ Зал Слави • Оновлюється автоматично")
     return embed
 
