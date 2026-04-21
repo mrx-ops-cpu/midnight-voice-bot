@@ -1,0 +1,28 @@
+# Віртуальні середовища
+venv/
+env/
+.venv/
+
+# Кеш Python (ЦЕ ОБОВ'ЯЗКОВО)
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Файли з секретами (токени, паролі)
+.env
+*.secret
+
+# Бази даних бота (щоб не зливати статистику гравців на GitHub)
+data/
+voice_stats.json
+active_sessions.json
+game_sessions.json
+message_ids.json
+
+# Налаштування редакторів коду (VS Code, PyCharm)
+.vscode/
+.idea/
+
+# Системні файли Windows/Mac
+Thumbs.db
+.DS_Store
