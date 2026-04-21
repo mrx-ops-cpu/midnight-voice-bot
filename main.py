@@ -343,7 +343,44 @@ async def play_tts(text, guild):
     except Exception as e:
         print(f"ERROR play_tts: {e}")
 
-@bot.tree.command(name="stats", description="Твоя персональна картка статистики")
+# ============================================================
+# ЛІМІТ /say
+# ============================================================
+SAY_LIMIT = 3  # Максимум використань на годину (можна змінити через /set_say_limit)
+
+# {user_id: [timestamp1, timestamp2, ...]} — список часів використань
+say_usage = {}
+
+def check_say_limit(user_id: int) -> tuple:
+    """
+    Повертає (можна_використати, залишилось, секунд_до_скиду)
+    """
+    if SAY_LIMIT == 0:
+        return True, 0, 0  # 0 = без ліміту
+
+    now = datetime.now().timestamp()
+    hour_ago = now - 3600
+
+    # Прибираємо старі записи
+    usage = [t for t in say_usage.get(user_id, []) if t > hour_ago]
+    say_usage[user_id] = usage
+
+    used      = len(usage)
+    remaining = SAY_LIMIT - used
+
+    if remaining <= 0:
+        # Коли скинеться — через скільки секунд мине година від найстарішого
+        reset_in = int(usage[0] + 3600 - now)
+        return False, 0, reset_in
+
+    return True, remaining, 0
+
+def record_say_usage(user_id: int):
+    if user_id not in say_usage:
+        say_usage[user_id] = []
+    say_usage[user_id].append(datetime.now().timestamp())
+
+
 async def stats_cmd(interaction: discord.Interaction):
     if not GLOBAL_SETTINGS["voice_stats"]:
         return await interaction.response.send_message("❌ Статистика вимкнена", ephemeral=True)
@@ -422,7 +459,9 @@ async def help_cmd(interaction: discord.Interaction):
     embed = discord.Embed(title="🌑 Midnight Bot | Допомога", color=0x2b2d31)
     embed.add_field(name="📊 Статистика", value="`/stats` — Персональна картка\n`/leaderboard` — Топ сервера", inline=False)
     embed.add_field(name="🎮 Геймінг",   value="`/games` — Активні катки\n`/kings` — Королі ігор",            inline=False)
-    embed.add_field(name="🎙️ Войс",      value="`/say` — Озвучити текст у голосовому каналі",                 inline=False)
+    embed.add_field(name="🎙️ Войс",
+        value="`/say` — Озвучити текст у голосовому каналі\n`/set_say_limit` — Змінити ліміт /say на годину",
+        inline=False)
     embed.add_field(name="⚙️ Система",
         value="`/ping` — Затримка та аптайм\n`/midnight_info` — Статус модулів\n`/set_monitoring` — Моніторинг ігор\n`/set_voice` — Voice Guardian\n`/set_stats` — Статистика войсу",
         inline=False)
@@ -446,8 +485,45 @@ async def kings_cmd(interaction: discord.Interaction):
 async def say_cmd(interaction: discord.Interaction, текст: str):
     if len(текст) > 200:
         return await interaction.response.send_message("❌ Максимум 200 символів", ephemeral=True)
-    await interaction.response.send_message(f"🔊 Озвучую: **{текст}**", ephemeral=True)
+
+    can_use, remaining, reset_in = check_say_limit(interaction.user.id)
+
+    if not can_use:
+        mins = reset_in // 60
+        secs = reset_in % 60
+        time_str = f"{mins}хв {secs}с" if mins > 0 else f"{secs}с"
+        return await interaction.response.send_message(
+            f"⏳ Ліміт вичерпано! (`{SAY_LIMIT}` за годину)\nСкинеться через **{time_str}**",
+            ephemeral=True
+        )
+
+    record_say_usage(interaction.user.id)
+
+    # Показуємо скільки залишилось (якщо ліміт увімкнено)
+    limit_info = f" _(залишилось: {remaining - 1}/{SAY_LIMIT})_" if SAY_LIMIT > 0 else ""
+    await interaction.response.send_message(
+        f"🔊 Озвучую: **{текст}**{limit_info}",
+        ephemeral=True
+    )
     asyncio.create_task(play_tts(текст, interaction.guild))
+
+@bot.tree.command(name="set_say_limit", description="Встановити ліміт /say на годину (0 = без ліміту)")
+@app_commands.describe(ліміт="Кількість використань на годину (0 = без ліміту)")
+async def set_say_limit(interaction: discord.Interaction, ліміт: int):
+    global SAY_LIMIT
+    # Тільки адміни сервера можуть змінювати ліміт
+    if not interaction.user.guild_permissions.administrator:
+        return await interaction.response.send_message(
+            "❌ Тільки адміністратори можуть змінювати ліміт",
+            ephemeral=True
+        )
+    if ліміт < 0:
+        return await interaction.response.send_message("❌ Ліміт не може бути від'ємним", ephemeral=True)
+    SAY_LIMIT = ліміт
+    if ліміт == 0:
+        await interaction.response.send_message("🔊 Ліміт `/say` вимкнено — необмежено")
+    else:
+        await interaction.response.send_message(f"🔊 Ліміт `/say` встановлено: **{ліміт}** на годину")
 
 @bot.tree.command(name="midnight_info", description="Статус системи")
 async def midnight_info(interaction: discord.Interaction):
