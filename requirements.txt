@@ -2,3 +2,4 @@ discord.py[voice]
 flask
 gTTS
 PyNaCl
+python-dotenv

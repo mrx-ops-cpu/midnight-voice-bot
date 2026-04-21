@@ -11,11 +11,29 @@ class TasksCog(commands.Cog):
         # Запускаємо фонові задачі при ініціалізації Кога
         self.periodic_save.start()
         self.daily_report.start()
+        self.update_dashboards.start() # <-- ДОДАНО ЗАПУСК ТАЙМЕРА
 
     def cog_unload(self):
         # Зупиняємо задачі, якщо Ког буде вивантажено (reload)
         self.periodic_save.cancel()
         self.daily_report.cancel()
+        self.update_dashboards.cancel() # <-- ДОДАНО ЗУПИНКУ ТАЙМЕРА
+
+    # ── Оновлення Дашбордів (кожні 1 хв) ─────────────────────────
+    @tasks.loop(minutes=1)
+    async def update_dashboards(self):
+        """Оновлює повідомлення Залу Слави та Активних ігор кожну хвилину."""
+        if not config.GLOBAL_SETTINGS["monitoring"] and not config.GLOBAL_SETTINGS["voice_stats"]:
+            return
+            
+        for guild in self.bot.guilds:
+            await utils.update_fame_message(guild, self.bot)
+            await utils.update_live_message(guild, self.bot)
+
+    @update_dashboards.before_loop
+    async def before_update_dashboards(self):
+        """Чекаємо, поки бот повністю завантажиться"""
+        await self.bot.wait_until_ready()
 
     # ── Periodic save (кожні 2 хв) ───────────────────────────────
     @tasks.loop(minutes=2)

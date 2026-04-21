@@ -6,7 +6,7 @@ GLOBAL_SETTINGS = {
     "monitoring":  True,
     "voice_guard": True,
     "voice_stats": True,
-    "version":     "v4.2.0 (Modular)",
+    "version":     "v4.3.0 (Modular)",
     "image_url":   "https://cdn.discordapp.com/avatars/1492662597357404211/a_4bf48afaac3798695e46c007ce568803.gif?size=1024",
     "start_time":  datetime.now(timezone.utc)
 }

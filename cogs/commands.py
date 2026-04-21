@@ -160,9 +160,14 @@ class CommandsCog(commands.Cog):
         embed.add_field(name="🎮 Ігор", value=f"`{len(config.active_games)}`", inline=True)
         embed.add_field(name="💾 Say ліміт", value=f"`{config.SAY_LIMIT}/год`", inline=True)
         
+        # Версія бота в самому низу
+        embed.add_field(name="🔢 Версія", value=f"`{config.GLOBAL_SETTINGS['version']}`", inline=False)
+        
         embed.set_thumbnail(url=config.GLOBAL_SETTINGS["image_url"])
         embed.set_footer(text=utils.midnight_footer())
-        await interaction.response.send_message(embed=embed)
+        
+        # Додаємо ephemeral=True сюди 👇
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @app_commands.command(name="help", description="Список команд")
     async def help_cmd(self, interaction: discord.Interaction):

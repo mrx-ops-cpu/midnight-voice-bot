@@ -6,6 +6,10 @@ from datetime import datetime
 from threading import Thread
 from flask import Flask, render_template
 
+# Завантажуємо змінні середовища з файлу .env (для роботи на ПК)
+from dotenv import load_dotenv
+load_dotenv()
+
 # Імпортуємо наші модулі
 from core import config, database, utils
 
@@ -135,12 +139,13 @@ async def main():
         except Exception as e:
             print(f"❌ Помилка завантаження {extension}: {e}")
 
-    # Отримуємо токен
+    # Отримуємо токен з .env (на ПК) або з Variables (на Railway)
     token = os.environ.get("DISCORD_TOKEN")
+    
     if not token:
-        print("⚠️ УВАГА: DISCORD_TOKEN не знайдено в оточенні!")
-        # Тільки для тестів на ПК. На хостингу використовуй Secrets/ENV!
-        token = "ТВІЙ_ТОКЕН_БОТА_ТУТ" 
+        print("❌ УВАГА: DISCORD_TOKEN не знайдено!")
+        print("Створи файл .env і додай туди DISCORD_TOKEN=твій_токен")
+        return
     
     await bot.start(token)
 

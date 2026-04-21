@@ -122,20 +122,41 @@ def get_total_time(user_id):
 def get_daily_time(user_id):
     return load_stats()["daily"].get(str(user_id), 0) + get_current_session(user_id)
 
-def get_top_games(limit_games=3, limit_players=5):
+def get_top_games(limit_games=5, limit_players=3):
+    """Формує топ популярних ігор сервера та топ гравців у них."""
     s = load_stats()
     gd = {}
+    
+    # 1. Беремо вже збережений час з бази даних
     for uid, ug in s.get("games", {}).items():
         for game, sec in ug.items():
-            if game not in gd: gd[game] = {"total": 0, "players": []}
+            if game not in gd:
+                gd[game] = {"total": 0, "players": {}}
             gd[game]["total"] += sec
-            gd[game]["players"].append((uid, sec))
+            # Збираємо час кожного гравця
+            gd[game]["players"][str(uid)] = gd[game]["players"].get(str(uid), 0) + sec
+
+    # 2. Додаємо "живий" час (тих, хто грає прямо зараз)
+    now = datetime.now().timestamp()
+    for uid, sess in config.game_sessions.items():
+        game = sess.get("game")
+        if not game: continue
+        dur = now - sess.get("start_time", now)
+        
+        if game not in gd:
+            gd[game] = {"total": 0, "players": {}}
+        gd[game]["total"] += dur
+        gd[game]["players"][str(uid)] = gd[game]["players"].get(str(uid), 0) + dur
             
+    # 3. Сортуємо ігри за загальним часом
     sorted_g = sorted(gd.items(), key=lambda x: x[1]["total"], reverse=True)
     result = {}
+    
     for game, data in sorted_g[:limit_games]:
+        # Сортуємо гравців усередині гри за їхнім вкладом
+        sorted_players = sorted(data["players"].items(), key=lambda x: x[1], reverse=True)[:limit_players]
         result[game] = {
-            "players": sorted(data["players"], key=lambda x: x[1], reverse=True)[:limit_players],
+            "players": sorted_players,
             "total":   data["total"]
         }
     return result

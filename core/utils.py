@@ -126,7 +126,7 @@ def build_fame_embed(guild, bot):
     s = database.load_stats()
     medals = ["🥇","🥈","🥉","4️⃣","5️⃣"]
 
-    # Топ войсу — з урахуванням поточних сесій
+    # 1. Топ войсу — з урахуванням поточних сесій (Залишаємо як є)
     total = dict(s.get("total", {}))
     for uid, start in config.voice_start_times.items():
         k = str(uid)
@@ -137,14 +137,23 @@ def build_fame_embed(guild, bot):
              for i, (uid, sec) in enumerate(top3)]
     embed.add_field(name="🎙️ Топ войсу", value="\n".join(lines) if lines else "*Немає даних*", inline=False)
 
-    # Топ-3 ігри
-    top_games = database.get_top_games(3, 5)
+    # 2. Топ-5 Ігор (Кожна гра як окремий блок)
+    # Викликаємо нашу оновлену функцію: 5 ігор, 3 гравці максимум
+    top_games = database.get_top_games(limit_games=5, limit_players=3) 
+    
     if top_games:
         for game, data in top_games.items():
             title = get_short_title(game)
-            plines = [f"{medals[i] if i<len(medals) else '•'} {database.get_display_name(uid, guild, bot)} — `{format_time(sec)}`"
+            # Формуємо список топ-3 гравців для цієї гри
+            plines = [f"{medals[i]} {database.get_display_name(uid, guild, bot)} — `{format_time(sec)}`"
                       for i, (uid, sec) in enumerate(data["players"])]
-            embed.add_field(name=f"{title}  ·  {format_time(data['total'])} загалом", value="\n".join(plines), inline=False)
+            
+            # Додаємо блок гри: Назва гри + Скільки загалом годин
+            embed.add_field(
+                name=f"{title}  ·  {format_time(data['total'])} загалом", 
+                value="\n".join(plines), 
+                inline=False
+            )
     else:
         embed.add_field(name="🎮 Ігри", value="*Ще немає даних*", inline=False)
 
