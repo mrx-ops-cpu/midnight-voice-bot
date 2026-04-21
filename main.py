@@ -144,7 +144,29 @@ def save_sessions():
     except Exception as e:
         print(f"ERROR save_sessions: {e}")
 
-def load_message_ids():
+GAME_SESSIONS_FILE = os.path.join(DATA_DIR, "game_sessions.json")
+
+def save_game_sessions():
+    try:
+        with open(GAME_SESSIONS_FILE, "w") as f:
+            json.dump(
+                {str(k): v for k, v in game_sessions.items()},
+                f
+            )
+    except Exception as e:
+        print(f"ERROR save_game_sessions: {e}")
+
+def load_game_sessions():
+    if os.path.exists(GAME_SESSIONS_FILE):
+        try:
+            with open(GAME_SESSIONS_FILE, "r") as f:
+                raw = json.load(f)
+            return {int(k): v for k, v in raw.items()}
+        except:
+            pass
+    return {}
+
+
     global live_message_id, fame_message_id
     if os.path.exists(MSG_FILE):
         try:
@@ -621,26 +643,24 @@ async def daily_report():
 @tasks.loop(minutes=10)
 async def periodic_save():
     """
-    Кожні 10 хвилин зберігає поточні войс+ігрові сесії в базу одним записом.
-    Скидає таймери щоб не рахувати двічі при виході.
+    Кожні 10 хвилин зберігає:
+    - войс-сесії (хто в войсі)
+    - ігрові сесії (хто грає, навіть без войсу)
+    Один read/write для всіх.
     """
     if not GLOBAL_SETTINGS["voice_stats"]:
         return
 
     now = datetime.now().timestamp()
-    users = list(voice_start_times.items())
-    if not users:
-        return
+    s   = load_stats()
+    saved_voice = 0
+    saved_games = 0
 
-    # Завантажуємо статистику ОДИН РАЗ для всіх
-    s = load_stats()
-    saved_count = 0
-
-    for user_id, start_time in users:
+    # ── Войс-сесії ──
+    for user_id, start_time in list(voice_start_times.items()):
         duration = now - start_time
         if duration < 60:
             continue
-
         uid  = str(user_id)
         game = game_sessions.get(user_id, {}).get("game")
 
@@ -650,17 +670,32 @@ async def periodic_save():
             s.setdefault("games", {}).setdefault(uid, {})[game] = \
                 s["games"][uid].get(game, 0) + duration
 
-        # Скидаємо таймери щоб не рахувати двічі
         voice_start_times[user_id] = now
         if user_id in game_sessions:
             game_sessions[user_id]["start_time"] = now
+        saved_voice += 1
 
-        saved_count += 1
+    # ── Ігрові сесії БЕЗ войсу ──
+    for user_id, session in list(game_sessions.items()):
+        # Якщо вже оброблено в войс-блоці вище — пропускаємо
+        if user_id in voice_start_times:
+            continue
+        duration = now - session["start_time"]
+        if duration < 60:
+            continue
+        uid  = str(user_id)
+        game = session["game"]
 
-    # Зберігаємо ОДИН РАЗ для всіх
-    if saved_count > 0:
+        s.setdefault("games", {}).setdefault(uid, {})[game] = \
+            s["games"][uid].get(game, 0) + duration
+
+        game_sessions[user_id]["start_time"] = now
+        saved_games += 1
+
+    if saved_voice > 0 or saved_games > 0:
         save_stats(s)
-        print(f"PERIODIC SAVE: збережено {saved_count} сесій")
+        save_game_sessions()
+        print(f"PERIODIC SAVE: войс={saved_voice} ігри={saved_games}")
 
 def get_game_name(member):
     if not member.activities:
@@ -859,6 +894,7 @@ async def on_presence_update(before, after):
             duration = datetime.now().timestamp() - game_sessions[after.id]["start_time"]
             add_game_only_time(after.id, duration, before_game)
             del game_sessions[after.id]
+            save_game_sessions()
         if before_game in active_games:
             players = [m.display_name for m in guild.members if get_game_name(m) == before_game and not m.bot]
             if len(players) < 1:
@@ -868,6 +904,7 @@ async def on_presence_update(before, after):
             changed = True
     if after_game:
         game_sessions[after.id] = {"game": after_game, "start_time": datetime.now().timestamp()}
+        save_game_sessions()
         players = [m.display_name for m in guild.members if get_game_name(m) == after_game and not m.bot]
         if len(players) >= 1:
             if after_game not in active_games:
@@ -888,6 +925,10 @@ async def on_ready():
     load_message_ids()
     active_games.clear()
     game_sessions.clear()
+
+    # Завантажуємо збережені ігрові сесії
+    saved_game_sessions = load_game_sessions()
+
     for guild in bot.guilds:
         if not GLOBAL_SETTINGS["monitoring"]:
             continue
@@ -896,9 +937,14 @@ async def on_ready():
                 continue
             game = get_game_name(member)
             if game:
-                game_sessions[member.id] = {"game": game, "start_time": datetime.now().timestamp()}
+                # Відновлюємо збережену сесію якщо є, інакше стартуємо нову
+                if member.id in saved_game_sessions and saved_game_sessions[member.id]["game"] == game:
+                    game_sessions[member.id] = saved_game_sessions[member.id]
+                    print(f"RESTORED GAME SESSION: {member.name} — {game}")
+                else:
+                    game_sessions[member.id] = {"game": game, "start_time": datetime.now().timestamp()}
+
                 if game not in active_games:
-                    # start_time = зараз, бо ми не знаємо коли почали
                     active_games[game] = {"players": [member.display_name], "start_time": datetime.now().timestamp()}
                 elif member.display_name not in active_games[game]["players"]:
                     active_games[game]["players"].append(member.display_name)
