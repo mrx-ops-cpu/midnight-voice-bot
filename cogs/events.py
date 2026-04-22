@@ -7,18 +7,21 @@ from core import config, database, utils
 def get_valid_games(member):
     """
     Повертає список усіх валідних ігор, у які зараз грає користувач.
-    Ігнорує Spotify та CustomActivity (користувацькі статуси).
     """
     if not member.activities: 
         return []
         
     games = []
     for act in member.activities:
-        if isinstance(act, discord.CustomActivity) or act.name == "Spotify": 
+        if getattr(act, 'type', None) == discord.ActivityType.custom or isinstance(act, discord.CustomActivity): 
             continue
-        if hasattr(act, 'name') and act.name: 
-            if act.name not in games:
-                games.append(act.name)
+        if getattr(act, 'name', '') == "Spotify": 
+            continue
+            
+        act_name = getattr(act, 'name', None)
+        if act_name: 
+            if act_name not in games:
+                games.append(act_name)
     return games
 
 class EventsCog(commands.Cog):
@@ -62,7 +65,6 @@ class EventsCog(commands.Cog):
         guild = after.guild
         
         after_games = get_valid_games(after)
-        
         current_sessions = config.game_sessions.get(after.id, {})
         
         changed = False
@@ -73,7 +75,10 @@ class EventsCog(commands.Cog):
                 sess = current_sessions[game]
                 dur = now - sess["start_time"]
                 
-                database.add_game_time_only(after.id, dur, game)
+                try:
+                    database.add_game_time_only(after.id, dur, game)
+                except Exception as e:
+                    print(f"Error saving game time for {game}: {e}")
                 
                 del current_sessions[game]
                 

@@ -51,7 +51,11 @@ class TasksCog(commands.Cog):
                 dur = now - sess["start_time"]
                 if dur >= 30: 
                     k = str(uid)
-                    s.setdefault("games", {}).setdefault(k, {})[game] = s["games"][k].get(game, 0) + dur
+                    
+                    if "games" not in s: s["games"] = {}
+                    if k not in s["games"]: s["games"][k] = {}
+                    
+                    s["games"][k][game] = s["games"][k].get(game, 0) + dur
                     config.game_sessions[uid][game]["start_time"] = now
                     sg += 1
 

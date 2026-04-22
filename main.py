@@ -122,7 +122,15 @@ async def on_ready():
         for member in guild.members:
             if member.bot: continue
             
-            valid_acts = list(set([a.name for a in member.activities if hasattr(a, 'name') and a.name and not isinstance(a, discord.CustomActivity) and a.name != "Spotify"]))
+            valid_acts = []
+            for a in member.activities:
+                if getattr(a, 'type', None) == discord.ActivityType.custom or isinstance(a, discord.CustomActivity):
+                    continue
+                if getattr(a, 'name', '') == "Spotify":
+                    continue
+                if hasattr(a, 'name') and a.name:
+                    valid_acts.append(a.name)
+            valid_acts = list(set(valid_acts))
             
             if valid_acts and config.GLOBAL_SETTINGS["monitoring"]:
                 user_sessions = {}

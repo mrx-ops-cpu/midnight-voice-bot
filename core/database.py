@@ -79,7 +79,6 @@ def save_active_rooms():
         os.replace(tmp_file, config.ROOMS_FILE)
     except Exception as e: print(f"ERROR save_rooms: {e}")
 
-
 def load_message_ids():
     if os.path.exists(config.MSG_FILE):
         try:
@@ -129,7 +128,13 @@ def add_game_time_only(member_id, duration, game):
     if duration <= 0 or not game: return
     s = load_stats()
     uid = str(member_id)
-    s.setdefault("games", {}).setdefault(uid, {})[game] = s["games"][uid].get(game, 0) + duration
+    
+    if "games" not in s:
+        s["games"] = {}
+    if uid not in s["games"]:
+        s["games"][uid] = {}
+        
+    s["games"][uid][game] = s["games"][uid].get(game, 0) + duration
     save_stats(s)
     update_streak(uid)
 
