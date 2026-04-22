@@ -117,31 +117,29 @@ def build_live_embed(guild, bot):
     now = datetime.now().timestamp()
     rooms = {}
     
-    for uid, sess in config.game_sessions.items():
-        norm_game = database.normalize_game_name(sess["game"])
-        
-        if norm_game not in rooms:
-            room_start = config.active_rooms.get(norm_game, sess.get("session_start", now))
-            rooms[norm_game] = {
-                "room_dur": int(now - room_start),
-                "players": []
-            }
+    for uid, user_sessions in config.game_sessions.items():
+        for game, sess in user_sessions.items():
+            norm_game = database.normalize_game_name(game)
             
-        player_name = database.get_display_name(uid, guild, bot)
-        player_dur = int(now - sess.get("session_start", sess["start_time"]))
-        rooms[norm_game]["players"].append((player_name, player_dur))
+            if norm_game not in rooms:
+                room_start = config.active_rooms.get(norm_game, sess.get("session_start", now))
+                rooms[norm_game] = {
+                    "room_dur": int(now - room_start),
+                    "players": []
+                }
+                
+            player_name = database.get_display_name(uid, guild, bot)
+            player_dur = int(now - sess.get("session_start", sess["start_time"]))
+            rooms[norm_game]["players"].append((player_name, player_dur))
         
     sorted_rooms = sorted(rooms.items(), key=lambda x: x[1]["room_dur"], reverse=True)[:10]
     
     lines = []
     for game, data in sorted_rooms:
-        # Заголовок кімнати
         lines.append(f"**🎮 {game}** ·  ⏱️ `{format_time(data['room_dur'])}`")
-        
         players_sorted = sorted(data["players"], key=lambda x: x[1], reverse=True)
         for p_name, p_dur in players_sorted:
             lines.append(f"└ 👥 {p_name} — `{format_time(p_dur)}`")
-            
         lines.append("") 
         
     embed.description = "\n".join(lines).strip()

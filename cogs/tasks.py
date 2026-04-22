@@ -46,14 +46,14 @@ class TasksCog(commands.Cog):
                 config.voice_last_save[uid] = now
                 sv += 1
 
-        for uid, sess in list(config.game_sessions.items()):
-            dur = now - sess["start_time"]
-            if dur >= 30: 
-                k = str(uid)
-                game = sess["game"]
-                s.setdefault("games", {}).setdefault(k, {})[game] = s["games"][k].get(game, 0) + dur
-                config.game_sessions[uid]["start_time"] = now
-                sg += 1
+        for uid, user_sessions in list(config.game_sessions.items()):
+            for game, sess in user_sessions.items():
+                dur = now - sess["start_time"]
+                if dur >= 30: 
+                    k = str(uid)
+                    s.setdefault("games", {}).setdefault(k, {})[game] = s["games"][k].get(game, 0) + dur
+                    config.game_sessions[uid][game]["start_time"] = now
+                    sg += 1
 
         if sv > 0 or sg > 0:
             database.save_stats(s)

@@ -44,7 +44,14 @@ def load_game_sessions():
         try:
             with open(config.GAME_SESSIONS_FILE, "r", encoding="utf-8") as f:
                 raw = json.load(f)
-            return {int(k): v for k, v in raw.items()}
+            
+            migrated = {}
+            for k, v in raw.items():
+                if "game" in v:
+                    migrated[int(k)] = {v["game"]: {"start_time": v["start_time"], "session_start": v.get("session_start", v["start_time"])}}
+                else:
+                    migrated[int(k)] = v
+            return migrated
         except: pass
     return {}
 
@@ -175,16 +182,15 @@ def get_top_games(limit_games=10, limit_players=3):
             gd[norm_game]["players"][str(uid)] = gd[norm_game]["players"].get(str(uid), 0) + sec
 
     now = datetime.now().timestamp()
-    for uid, sess in config.game_sessions.items():
-        game = sess.get("game")
-        if not game: continue
-        norm_game = normalize_game_name(game)
-        dur = now - sess.get("start_time", now) 
-        
-        if norm_game not in gd:
-            gd[norm_game] = {"total": 0, "players": {}}
-        gd[norm_game]["total"] += dur
-        gd[norm_game]["players"][str(uid)] = gd[norm_game]["players"].get(str(uid), 0) + dur
+    for uid, user_sessions in config.game_sessions.items():
+        for game, sess in user_sessions.items():
+            norm_game = normalize_game_name(game)
+            dur = now - sess.get("start_time", now) 
+            
+            if norm_game not in gd:
+                gd[norm_game] = {"total": 0, "players": {}}
+            gd[norm_game]["total"] += dur
+            gd[norm_game]["players"][str(uid)] = gd[norm_game]["players"].get(str(uid), 0) + dur
             
     sorted_g = sorted(gd.items(), key=lambda x: x[1]["total"], reverse=True)
     result = {}

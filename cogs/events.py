@@ -5,6 +5,10 @@ from datetime import datetime
 from core import config, database, utils
 
 def get_valid_games(member):
+    """
+    Повертає список усіх валідних ігор, у які зараз грає користувач.
+    Ігнорує Spotify та CustomActivity (користувацькі статуси).
+    """
     if not member.activities: 
         return []
         
@@ -57,55 +61,55 @@ class EventsCog(commands.Cog):
         await asyncio.sleep(1)
         guild = after.guild
         
-        before_games = get_valid_games(before)
         after_games = get_valid_games(after)
         
-        current_saved_game = config.game_sessions.get(after.id, {}).get("game")
+        current_sessions = config.game_sessions.get(after.id, {})
         
-        new_games = [g for g in after_games if g not in before_games]
-        
-        if new_games:
-            after_game = new_games[-1]
-        elif current_saved_game not in after_games:
-            if after_games:
-                valid_acts = [a for a in after.activities if hasattr(a, 'name') and a.name in after_games]
-                valid_acts.sort(key=lambda a: a.created_at.timestamp() if hasattr(a, 'created_at') and a.created_at else 0, reverse=True)
-                after_game = valid_acts[0].name if valid_acts else None
-            else:
-                after_game = None
-        else:
-            after_game = current_saved_game
-
-        if current_saved_game == after_game: 
-            return
-
         changed = False
         now = datetime.now().timestamp()
+        
+        for game in list(current_sessions.keys()):
+            if game not in after_games:
+                sess = current_sessions[game]
+                dur = now - sess["start_time"]
+                
+                database.add_game_time_only(after.id, dur, game)
+                
+                del current_sessions[game]
+                
+                norm_ended = database.normalize_game_name(game)
+                
+                still_playing = False
+                for uid, user_sessions in config.game_sessions.items():
+                    for g in user_sessions.keys():
+                        if database.normalize_game_name(g) == norm_ended:
+                            still_playing = True
+                            break
+                    if still_playing: break
+                            
+                if not still_playing and norm_ended in config.active_rooms:
+                    del config.active_rooms[norm_ended]
+                    
+                changed = True
 
-        if current_saved_game and current_saved_game != after_game:
-            dur = now - config.game_sessions[after.id]["start_time"]
-            database.add_game_time_only(after.id, dur, current_saved_game)
+        for game in after_games:
+            if game not in current_sessions:
+                current_sessions[game] = {
+                    "start_time": now, 
+                    "session_start": now
+                }
+                
+                norm_started = database.normalize_game_name(game)
+                
+                if norm_started not in config.active_rooms:
+                    config.active_rooms[norm_started] = now
+                    
+                changed = True
+
+        if current_sessions:
+            config.game_sessions[after.id] = current_sessions
+        elif after.id in config.game_sessions:
             del config.game_sessions[after.id]
-            
-            norm_ended = database.normalize_game_name(current_saved_game)
-            still_playing = any(database.normalize_game_name(s["game"]) == norm_ended for s in config.game_sessions.values())
-            if not still_playing and norm_ended in config.active_rooms:
-                del config.active_rooms[norm_ended]
-                
-            changed = True
-
-        if after_game and current_saved_game != after_game:
-            config.game_sessions[after.id] = {
-                "game": after_game, 
-                "start_time": now, 
-                "session_start": now
-            }
-            
-            norm_started = database.normalize_game_name(after_game)
-            if norm_started not in config.active_rooms:
-                config.active_rooms[norm_started] = now
-                
-            changed = True
 
         if changed:
             database.save_game_sessions()
