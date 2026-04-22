@@ -7,12 +7,23 @@ from core import config, database, utils
 def get_game_name(member):
     if not member.activities: 
         return None
+        
+    valid_acts = []
     for act in member.activities:
         if isinstance(act, discord.CustomActivity) or act.name == "Spotify": 
             continue
         if hasattr(act, 'name') and act.name: 
-            return act.name
-    return None
+            valid_acts.append(act)
+            
+    if not valid_acts:
+        return None
+        
+    valid_acts.sort(
+        key=lambda a: a.created_at.timestamp() if hasattr(a, 'created_at') and a.created_at else 0, 
+        reverse=True
+    )
+    
+    return valid_acts[0].name
 
 class EventsCog(commands.Cog):
     def __init__(self, bot):

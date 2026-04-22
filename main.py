@@ -121,8 +121,12 @@ async def on_ready():
         for member in guild.members:
             if member.bot: continue
             
-            act = next((a for a in member.activities if hasattr(a, 'name') and a.name and not isinstance(a, discord.CustomActivity) and a.name != "Spotify"), None)
-            game = act.name if act else None
+            valid_acts = [a for a in member.activities if hasattr(a, 'name') and a.name and not isinstance(a, discord.CustomActivity) and a.name != "Spotify"]
+            if valid_acts:
+                valid_acts.sort(key=lambda a: a.created_at.timestamp() if hasattr(a, 'created_at') and a.created_at else 0, reverse=True)
+                game = valid_acts[0].name
+            else:
+                game = None
             
             if game and config.GLOBAL_SETTINGS["monitoring"]:
                 if member.id in saved_gs and saved_gs[member.id].get("game") == game:
