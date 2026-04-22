@@ -4,26 +4,18 @@ import asyncio
 from datetime import datetime
 from core import config, database, utils
 
-def get_game_name(member):
+def get_valid_games(member):
     if not member.activities: 
-        return None
+        return []
         
-    valid_acts = []
+    games = []
     for act in member.activities:
         if isinstance(act, discord.CustomActivity) or act.name == "Spotify": 
             continue
         if hasattr(act, 'name') and act.name: 
-            valid_acts.append(act)
-            
-    if not valid_acts:
-        return None
-        
-    valid_acts.sort(
-        key=lambda a: a.created_at.timestamp() if hasattr(a, 'created_at') and a.created_at else 0, 
-        reverse=True
-    )
-    
-    return valid_acts[0].name
+            if act.name not in games:
+                games.append(act.name)
+    return games
 
 class EventsCog(commands.Cog):
     def __init__(self, bot):
@@ -65,9 +57,25 @@ class EventsCog(commands.Cog):
         await asyncio.sleep(1)
         guild = after.guild
         
-        after_game = get_game_name(after)
+        before_games = get_valid_games(before)
+        after_games = get_valid_games(after)
+        
         current_saved_game = config.game_sessions.get(after.id, {}).get("game")
         
+        new_games = [g for g in after_games if g not in before_games]
+        
+        if new_games:
+            after_game = new_games[-1]
+        elif current_saved_game not in after_games:
+            if after_games:
+                valid_acts = [a for a in after.activities if hasattr(a, 'name') and a.name in after_games]
+                valid_acts.sort(key=lambda a: a.created_at.timestamp() if hasattr(a, 'created_at') and a.created_at else 0, reverse=True)
+                after_game = valid_acts[0].name if valid_acts else None
+            else:
+                after_game = None
+        else:
+            after_game = current_saved_game
+
         if current_saved_game == after_game: 
             return
 
