@@ -3,25 +3,25 @@ import json
 from datetime import datetime, date, timedelta
 from core import config
 
-# ── Статистика (Stats) ───────────────────────────────────────
 def load_stats():
     if os.path.exists(config.STATS_FILE):
         try:
             with open(config.STATS_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            for k in ("total", "daily", "games", "streaks"):
+            for k in ("total", "daily", "games", "streaks", "history"):
                 data.setdefault(k, {})
             return data
         except Exception as e: print(f"ERROR load_stats: {e}")
-    return {"total": {}, "daily": {}, "games": {}, "streaks": {}}
+    return {"total": {}, "daily": {}, "games": {}, "streaks": {}, "history": {}}
 
 def save_stats(data):
     try:
-        with open(config.STATS_FILE, "w", encoding="utf-8") as f:
+        tmp_file = config.STATS_FILE + ".tmp"
+        with open(tmp_file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_file, config.STATS_FILE)
     except Exception as e: print(f"ERROR save_stats: {e}")
 
-# ── Сесії (Войс та Ігри) ─────────────────────────────────────
 def load_voice_sessions():
     if os.path.exists(config.SESSIONS_FILE):
         try:
@@ -33,8 +33,10 @@ def load_voice_sessions():
 
 def save_voice_sessions():
     try:
-        with open(config.SESSIONS_FILE, "w", encoding="utf-8") as f:
+        tmp_file = config.SESSIONS_FILE + ".tmp"
+        with open(tmp_file, "w", encoding="utf-8") as f:
             json.dump({str(k): v for k, v in config.voice_start_times.items()}, f)
+        os.replace(tmp_file, config.SESSIONS_FILE)
     except Exception as e: print(f"ERROR save_voice_sessions: {e}")
 
 def load_game_sessions():
@@ -48,11 +50,29 @@ def load_game_sessions():
 
 def save_game_sessions():
     try:
-        with open(config.GAME_SESSIONS_FILE, "w", encoding="utf-8") as f:
+        tmp_file = config.GAME_SESSIONS_FILE + ".tmp"
+        with open(tmp_file, "w", encoding="utf-8") as f:
             json.dump({str(k): v for k, v in config.game_sessions.items()}, f)
+        os.replace(tmp_file, config.GAME_SESSIONS_FILE)
     except Exception as e: print(f"ERROR save_game_sessions: {e}")
 
-# ── ID Повідомлень (Live-віджети) ────────────────────────────
+def load_active_rooms():
+    if os.path.exists(config.ROOMS_FILE):
+        try:
+            with open(config.ROOMS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except: pass
+    return {}
+
+def save_active_rooms():
+    try:
+        tmp_file = config.ROOMS_FILE + ".tmp"
+        with open(tmp_file, "w", encoding="utf-8") as f:
+            json.dump(config.active_rooms, f, ensure_ascii=False)
+        os.replace(tmp_file, config.ROOMS_FILE)
+    except Exception as e: print(f"ERROR save_rooms: {e}")
+
+
 def load_message_ids():
     if os.path.exists(config.MSG_FILE):
         try:
@@ -64,11 +84,12 @@ def load_message_ids():
 
 def save_message_ids():
     try:
-        with open(config.MSG_FILE, "w", encoding="utf-8") as f:
+        tmp_file = config.MSG_FILE + ".tmp"
+        with open(tmp_file, "w", encoding="utf-8") as f:
             json.dump({"live": config.live_message_id, "fame": config.fame_message_id}, f)
+        os.replace(tmp_file, config.MSG_FILE)
     except Exception as e: print(f"ERROR save_message_ids: {e}")
 
-# ── Логіка підрахунку часу та стриків ────────────────────────
 def update_streak(uid):
     s = load_stats()
     today = date.today().isoformat()
@@ -88,17 +109,12 @@ def get_streak(uid):
     yest  = (date.today() - timedelta(days=1)).isoformat()
     return entry.get("count", 0) if entry.get("last_date") in (today, yest) else 0
 
-def add_voice_time(member_id, duration, game=None):
+def add_voice_time_only(member_id, duration):
     if duration <= 0: return
     s = load_stats()
     uid = str(member_id)
-    
     s["total"][uid] = s["total"].get(uid, 0) + duration
     s["daily"][uid] = s["daily"].get(uid, 0) + duration
-    
-    if game:
-        s.setdefault("games", {}).setdefault(uid, {})[game] = s["games"][uid].get(game, 0) + duration
-        
     save_stats(s)
     update_streak(uid)
 
@@ -106,60 +122,26 @@ def add_game_time_only(member_id, duration, game):
     if duration <= 0 or not game: return
     s = load_stats()
     uid = str(member_id)
-    
     s.setdefault("games", {}).setdefault(uid, {})[game] = s["games"][uid].get(game, 0) + duration
     save_stats(s)
     update_streak(uid)
+
+def get_unsaved_voice_time(user_id):
+    if user_id in config.voice_start_times:
+        last_save = config.voice_last_save.get(user_id, config.voice_start_times[user_id])
+        return datetime.now().timestamp() - last_save
+    return 0.0
+
+def get_total_time(user_id):
+    return load_stats()["total"].get(str(user_id), 0) + get_unsaved_voice_time(user_id)
+
+def get_daily_time(user_id):
+    return load_stats()["daily"].get(str(user_id), 0) + get_unsaved_voice_time(user_id)
 
 def get_current_session(user_id):
     if user_id in config.voice_start_times:
         return datetime.now().timestamp() - config.voice_start_times[user_id]
     return 0.0
-
-def get_total_time(user_id):
-    return load_stats()["total"].get(str(user_id), 0) + get_current_session(user_id)
-
-def get_daily_time(user_id):
-    return load_stats()["daily"].get(str(user_id), 0) + get_current_session(user_id)
-
-def get_top_games(limit_games=5, limit_players=3):
-    """Формує топ популярних ігор сервера та топ гравців у них."""
-    s = load_stats()
-    gd = {}
-    
-    # 1. Беремо вже збережений час з бази даних
-    for uid, ug in s.get("games", {}).items():
-        for game, sec in ug.items():
-            if game not in gd:
-                gd[game] = {"total": 0, "players": {}}
-            gd[game]["total"] += sec
-            # Збираємо час кожного гравця
-            gd[game]["players"][str(uid)] = gd[game]["players"].get(str(uid), 0) + sec
-
-    # 2. Додаємо "живий" час (тих, хто грає прямо зараз)
-    now = datetime.now().timestamp()
-    for uid, sess in config.game_sessions.items():
-        game = sess.get("game")
-        if not game: continue
-        dur = now - sess.get("start_time", now)
-        
-        if game not in gd:
-            gd[game] = {"total": 0, "players": {}}
-        gd[game]["total"] += dur
-        gd[game]["players"][str(uid)] = gd[game]["players"].get(str(uid), 0) + dur
-            
-    # 3. Сортуємо ігри за загальним часом
-    sorted_g = sorted(gd.items(), key=lambda x: x[1]["total"], reverse=True)
-    result = {}
-    
-    for game, data in sorted_g[:limit_games]:
-        # Сортуємо гравців усередині гри за їхнім вкладом
-        sorted_players = sorted(data["players"].items(), key=lambda x: x[1], reverse=True)[:limit_players]
-        result[game] = {
-            "players": sorted_players,
-            "total":   data["total"]
-        }
-    return result
 
 def get_display_name(uid, guild, bot=None):
     try:
@@ -170,3 +152,47 @@ def get_display_name(uid, guild, bot=None):
             if u: return u.display_name
     except: pass
     return f"User {uid}"
+
+def normalize_game_name(game_name):
+    if not game_name: 
+        return game_name
+    lower_name = game_name.lower()
+    gta_aliases = ["gta", "grand theft auto", "rage mp", "rage multiplayer", "ragemp", "fivem", "altv"]
+    if any(alias in lower_name for alias in gta_aliases):
+        return "GTA V"
+    return game_name
+
+def get_top_games(limit_games=10, limit_players=3):
+    s = load_stats()
+    gd = {}
+    
+    for uid, ug in s.get("games", {}).items():
+        for game, sec in ug.items():
+            norm_game = normalize_game_name(game)
+            if norm_game not in gd:
+                gd[norm_game] = {"total": 0, "players": {}}
+            gd[norm_game]["total"] += sec
+            gd[norm_game]["players"][str(uid)] = gd[norm_game]["players"].get(str(uid), 0) + sec
+
+    now = datetime.now().timestamp()
+    for uid, sess in config.game_sessions.items():
+        game = sess.get("game")
+        if not game: continue
+        norm_game = normalize_game_name(game)
+        dur = now - sess.get("start_time", now) 
+        
+        if norm_game not in gd:
+            gd[norm_game] = {"total": 0, "players": {}}
+        gd[norm_game]["total"] += dur
+        gd[norm_game]["players"][str(uid)] = gd[norm_game]["players"].get(str(uid), 0) + dur
+            
+    sorted_g = sorted(gd.items(), key=lambda x: x[1]["total"], reverse=True)
+    result = {}
+    
+    for game, data in sorted_g[:limit_games]:
+        sorted_players = sorted(data["players"].items(), key=lambda x: x[1], reverse=True)[:limit_players]
+        result[game] = {
+            "players": sorted_players,
+            "total":   data["total"]
+        }
+    return result

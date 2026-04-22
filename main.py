@@ -2,54 +2,79 @@ import discord
 from discord.ext import commands
 import os
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from threading import Thread
 from flask import Flask, render_template
 
-# Завантажуємо змінні середовища з файлу .env (для роботи на ПК)
 from dotenv import load_dotenv
 load_dotenv()
 
-# Імпортуємо наші модулі
 from core import config, database, utils
 
-# ── Ініціалізація Бота ───────────────────────────────────────
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='!', intents=intents, chunk_guilds_at_startup=True)
 
-# ── Налаштування Flask (Web Dashboard) ───────────────────────
-# Вказуємо Flask шукати шаблони в папці templates
 app = Flask(__name__, template_folder="templates")
 
 @app.route('/')
 def home():
-    # Збираємо дані для дашборду
     voice_online = len(config.voice_start_times)
+    now = datetime.now().timestamp()
     
+    rooms_data = {}
+    
+    for uid, sess in list(config.game_sessions.items()):
+        norm_game = database.normalize_game_name(sess["game"])
+        
+        if norm_game not in rooms_data:
+            room_start = config.active_rooms.get(norm_game, sess.get("session_start", now))
+            rooms_data[norm_game] = {
+                "room_dur": int(now - room_start),
+                "players": []
+            }
+            
+        name = database.get_display_name(uid, None, bot)
+        rooms_data[norm_game]["players"].append(name)
+        
     games = []
-    for name, data in config.active_games.items():
-        dur = int(datetime.now().timestamp() - data["start_time"])
+    for name, data in sorted(rooms_data.items(), key=lambda x: x[1]["room_dur"], reverse=True)[:10]:
         games.append({
             "name": name,
-            "time": utils.format_time(dur),
+            "time": utils.format_time(data["room_dur"]),
             "players": ", ".join(data["players"])
         })
         
-    # Топ користувачів
     s = database.load_stats()
     total = dict(s.get("total", {}))
-    for uid, start in config.voice_start_times.items():
+    
+    for uid, start in list(config.voice_start_times.items()):
         k = str(uid)
-        total[k] = total.get(k, 0) + (datetime.now().timestamp() - start)
+        total[k] = total.get(k, 0) + (now - start)
         
     top_users = []
     for uid, sec in sorted(total.items(), key=lambda x: x[1], reverse=True)[:5]:
         name = database.get_display_name(uid, None, bot)
         top_users.append((name, utils.format_time(sec)))
         
-    # Демо-дані для графіка (можна пізніше прив'язати до реальної бази)
-    chart_labels = ["Пн", "Вв", "Ср", "Чт", "Пт", "Сб", "Нд"]
-    chart_data = [12, 19, 15, 25, 22, 30, 28]
+    history = dict(s.get("history", {}))
+    today_daily_sec = sum(s.get("daily", {}).values())
+    
+    for uid, start in list(config.voice_start_times.items()):
+        today_daily_sec += (now - config.voice_last_save.get(uid, start))
+        
+    today_str = datetime.now(timezone.utc).strftime("%d.%m")
+    
+    if today_str in history:
+        history[today_str] += today_daily_sec
+    else:
+        history[today_str] = today_daily_sec
+        
+    chart_labels = list(history.keys())[-7:]
+    chart_data = [round(history[k] / 3600, 1) for k in chart_labels]
+    
+    if not chart_labels:
+        chart_labels = ["Немає даних"]
+        chart_data = [0]
 
     return render_template('dashboard.html', 
                            voice_online=voice_online, 
@@ -65,7 +90,6 @@ def run_flask():
 def keep_alive():
     Thread(target=run_flask, daemon=True).start()
 
-# ── Запуск Бота та Cogs ──────────────────────────────────────
 INITIAL_EXTENSIONS = [
     'cogs.events',
     'cogs.commands',
@@ -79,21 +103,24 @@ async def on_ready():
     
     database.load_message_ids()
     
-    # Синхронізуємо слеш-команди з Discord
-    await bot.tree.sync()
+    if getattr(bot, "synced", False) is False:
+        await bot.tree.sync()
+        bot.synced = True
     
-    # Відновлюємо сесії з файлів бази (якщо бот перезапускався)
     saved_gs = database.load_game_sessions()
     saved_vs = database.load_voice_sessions()
-    config.active_games.clear()
+    saved_rooms = database.load_active_rooms()
+    
     config.game_sessions.clear()
+    config.active_rooms.clear()
 
-    # Пробігаємось по серверах і шукаємо, хто зараз у войсі чи грає
+    for r, t in saved_rooms.items():
+        config.active_rooms[r] = t
+
     for guild in bot.guilds:
         for member in guild.members:
             if member.bot: continue
             
-            # Шукаємо гру
             act = next((a for a in member.activities if hasattr(a, 'name') and a.name and not isinstance(a, discord.CustomActivity) and a.name != "Spotify"), None)
             game = act.name if act else None
             
@@ -101,37 +128,42 @@ async def on_ready():
                 if member.id in saved_gs and saved_gs[member.id].get("game") == game:
                     config.game_sessions[member.id] = saved_gs[member.id]
                 else:
-                    config.game_sessions[member.id] = {"game": game, "start_time": datetime.now().timestamp()}
-                    
-                if game not in config.active_games:
-                    config.active_games[game] = {"players": [member.display_name], "start_time": datetime.now().timestamp()}
-                elif member.display_name not in config.active_games[game]["players"]:
-                    config.active_games[game]["players"].append(member.display_name)
+                    config.game_sessions[member.id] = {"game": game, "start_time": datetime.now().timestamp(), "session_start": datetime.now().timestamp()}
 
-        # Шукаємо людей у войсі
         for channel in guild.voice_channels:
             for member in channel.members:
                 if member.bot: continue
                 config.voice_start_times[member.id] = saved_vs.get(str(member.id), datetime.now().timestamp())
+                config.voice_last_save[member.id] = datetime.now().timestamp()
 
-        # Оновлюємо віджети
-        bot.loop.create_task(utils.update_fame_message(guild, bot))
-        bot.loop.create_task(utils.update_live_message(guild, bot))
+    now = datetime.now().timestamp()
+    active_games_now = set(database.normalize_game_name(s["game"]) for s in config.game_sessions.values())
+    
+    ghost_rooms = [r for r in config.active_rooms if r not in active_games_now]
+    for gr in ghost_rooms:
+        del config.active_rooms[gr]
+        
+    for s in config.game_sessions.values():
+        norm_g = database.normalize_game_name(s["game"])
+        if norm_g not in config.active_rooms:
+            config.active_rooms[norm_g] = s.get("session_start", now)
+            
+    database.save_active_rooms()
+
+    bot.loop.create_task(utils.update_fame_message(guild, bot))
+    bot.loop.create_task(utils.update_live_message(guild, bot))
 
     database.save_voice_sessions()
     database.save_game_sessions()
 
-    # Підключаємось до войсу (Войс-гард)
     await asyncio.sleep(2)
     await utils.join_voice_safe(bot)
     
-    print(f"READY: {len(config.voice_start_times)} у войсі | {len(config.active_games)} ігор")
+    print(f"READY: {len(config.voice_start_times)} у войсі | {len(config.active_rooms)} активних кімнат")
 
 async def main():
-    # Запускаємо веб-сервер
     keep_alive()
     
-    # Завантажуємо коги (модулі)
     for extension in INITIAL_EXTENSIONS:
         try:
             await bot.load_extension(extension)
@@ -139,16 +171,12 @@ async def main():
         except Exception as e:
             print(f"❌ Помилка завантаження {extension}: {e}")
 
-    # Отримуємо токен з .env (на ПК) або з Variables (на Railway)
     token = os.environ.get("DISCORD_TOKEN")
-    
     if not token:
         print("❌ УВАГА: DISCORD_TOKEN не знайдено!")
-        print("Створи файл .env і додай туди DISCORD_TOKEN=твій_токен")
         return
     
     await bot.start(token)
 
 if __name__ == "__main__":
-    # Запуск асинхронного лупу
     asyncio.run(main())

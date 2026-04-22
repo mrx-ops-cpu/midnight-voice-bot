@@ -9,7 +9,6 @@ from gtts import gTTS
 
 from core import config, database
 
-# ── Перевірка та встановлення FFmpeg ─────────────────────────
 def ensure_ffmpeg():
     found = shutil.which("ffmpeg")
     if found: return found
@@ -24,7 +23,6 @@ def ensure_ffmpeg():
 
 FFMPEG_PATH = ensure_ffmpeg()
 
-# ── Форматування та Дизайн ───────────────────────────────────
 def format_time(seconds):
     seconds = max(0, int(seconds))
     m_total = seconds // 60
@@ -41,10 +39,6 @@ def streak_emoji(uid):
     s = database.get_streak(uid)
     return f" 🔥{s}" if s >= 3 else ""
 
-def get_short_title(game):
-    return config.SHORT_TITLES.get(game, f"🎮 {game[:14]}")
-
-# ── Ліміти команди /say ──────────────────────────────────────
 def check_say_limit(user_id):
     if config.SAY_LIMIT == 0: return True, 0, 0
     now = datetime.now().timestamp()
@@ -62,7 +56,6 @@ def check_say_limit(user_id):
 def record_say_usage(user_id):
     config.say_usage.setdefault(user_id, []).append(datetime.now().timestamp())
 
-# ── Робота з Голосом (TTS & Войс-гард) ───────────────────────
 async def join_voice_safe(bot):
     if not config.GLOBAL_SETTINGS["voice_guard"]: return
     ch = bot.get_channel(config.VOICE_ID)
@@ -75,6 +68,7 @@ async def join_voice_safe(bot):
         await vc.move_to(ch)
 
 async def play_tts(text, guild, bot):
+    tmp_name = None
     try:
         ffmpeg = FFMPEG_PATH or shutil.which("ffmpeg")
         if not ffmpeg:
@@ -82,9 +76,10 @@ async def play_tts(text, guild, bot):
             return
             
         tts = gTTS(text=text, lang="uk")
-        tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
-        tts.save(tmp.name)
-        tmp.close()
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+            tmp_name = tmp.name
+            
+        await bot.loop.run_in_executor(None, tts.save, tmp_name)
         
         vc = discord.utils.get(bot.voice_clients, guild=guild)
         if not vc:
@@ -93,32 +88,64 @@ async def play_tts(text, guild, bot):
             vc = discord.utils.get(bot.voice_clients, guild=guild)
             
         if not vc:
-            os.remove(tmp.name)
             return
             
-        while vc.is_playing(): await asyncio.sleep(0.5)
-        vc.play(discord.FFmpegPCMAudio(tmp.name, executable=ffmpeg))
-        while vc.is_playing(): await asyncio.sleep(0.5)
+        while vc.is_playing(): 
+            await asyncio.sleep(0.5)
+            
+        vc.play(discord.FFmpegPCMAudio(tmp_name, executable=ffmpeg))
         
-        os.remove(tmp.name)
+        while vc.is_playing(): 
+            await asyncio.sleep(0.5)
+            
     except Exception as e:
         print(f"ERROR play_tts: {e}")
+    finally:
+        if tmp_name and os.path.exists(tmp_name):
+            try:
+                os.remove(tmp_name)
+            except:
+                pass
 
-# ── Створення Embeds ─────────────────────────────────────────
-def build_live_embed():
+def build_live_embed(guild, bot):
     embed = discord.Embed(title="🎮 Активні катки", color=0x57F287, timestamp=datetime.now(timezone.utc))
-    if not config.active_games:
+    if not config.game_sessions:
         embed.description = "*Зараз ніхто не грає*"
+        embed.set_footer(text="🔴 Live • Оновлюється автоматично")
         return embed
         
-    lines = []
-    for name, data in config.active_games.items():
-        dur = int(datetime.now().timestamp() - data["start_time"])
-        names = ", ".join(data["players"]) if data["players"] else "?"
-        lines.append(f"**{name}**\n👥 {names}\n⏱️ {format_time(dur)}\n")
+    now = datetime.now().timestamp()
+    rooms = {}
+    
+    for uid, sess in config.game_sessions.items():
+        norm_game = database.normalize_game_name(sess["game"])
         
-    embed.description = "\n".join(lines)
-    embed.set_footer(text="🔴 Live • Оновлюється автоматично")
+        if norm_game not in rooms:
+            room_start = config.active_rooms.get(norm_game, sess.get("session_start", now))
+            rooms[norm_game] = {
+                "room_dur": int(now - room_start),
+                "players": []
+            }
+            
+        player_name = database.get_display_name(uid, guild, bot)
+        player_dur = int(now - sess.get("session_start", sess["start_time"]))
+        rooms[norm_game]["players"].append((player_name, player_dur))
+        
+    sorted_rooms = sorted(rooms.items(), key=lambda x: x[1]["room_dur"], reverse=True)[:10]
+    
+    lines = []
+    for game, data in sorted_rooms:
+        # Заголовок кімнати
+        lines.append(f"**🎮 {game}** ·  ⏱️ `{format_time(data['room_dur'])}`")
+        
+        players_sorted = sorted(data["players"], key=lambda x: x[1], reverse=True)
+        for p_name, p_dur in players_sorted:
+            lines.append(f"└ 👥 {p_name} — `{format_time(p_dur)}`")
+            
+        lines.append("") 
+        
+    embed.description = "\n".join(lines).strip()
+    embed.set_footer(text="🔴 Live • Топ 10 • Оновлюється автоматично")
     return embed
 
 def build_fame_embed(guild, bot):
@@ -126,46 +153,43 @@ def build_fame_embed(guild, bot):
     s = database.load_stats()
     medals = ["🥇","🥈","🥉","4️⃣","5️⃣"]
 
-    # 1. Топ войсу — з урахуванням поточних сесій (Залишаємо як є)
     total = dict(s.get("total", {}))
     for uid, start in config.voice_start_times.items():
         k = str(uid)
-        total[k] = total.get(k, 0) + (datetime.now().timestamp() - start)
+        last_save = config.voice_last_save.get(uid, start)
+        total[k] = total.get(k, 0) + (datetime.now().timestamp() - last_save)
         
-    top3 = sorted(total.items(), key=lambda x: x[1], reverse=True)[:3]
-    lines = [f"{medals[i]} **{database.get_display_name(uid, guild, bot)}**{streak_emoji(uid)} — `{format_time(sec)}`"
-             for i, (uid, sec) in enumerate(top3)]
-    embed.add_field(name="🎙️ Топ войсу", value="\n".join(lines) if lines else "*Немає даних*", inline=False)
+    top3_voice = sorted(total.items(), key=lambda x: x[1], reverse=True)[:3]
+    voice_lines = []
+    for i, (uid, sec) in enumerate(top3_voice):
+        name = database.get_display_name(uid, guild, bot)
+        voice_lines.append(f"{medals[i]} **{name}**{streak_emoji(uid)} — `{format_time(sec)}`")
+        
+    embed.add_field(name="🎙️ Топ войсу (За весь час)", value="\n".join(voice_lines) if voice_lines else "*Немає даних*", inline=False)
 
-    # 2. Топ-5 Ігор (Кожна гра як окремий блок)
-    # Викликаємо нашу оновлену функцію: 5 ігор, 3 гравці максимум
-    top_games = database.get_top_games(limit_games=5, limit_players=3) 
-    
+    top_games = database.get_top_games(limit_games=10, limit_players=3) 
     if top_games:
         for game, data in top_games.items():
-            title = get_short_title(game)
-            # Формуємо список топ-3 гравців для цієї гри
-            plines = [f"{medals[i]} {database.get_display_name(uid, guild, bot)} — `{format_time(sec)}`"
-                      for i, (uid, sec) in enumerate(data["players"])]
+            plines = []
+            for i, (uid, sec) in enumerate(data["players"]):
+                name = database.get_display_name(uid, guild, bot)
+                plines.append(f"{medals[i]} {name} — `{format_time(sec)}`")
             
-            # Додаємо блок гри: Назва гри + Скільки загалом годин
             embed.add_field(
-                name=f"{title}  ·  {format_time(data['total'])} загалом", 
+                name=f"🎮 {game}  ·  {format_time(data['total'])} загалом", 
                 value="\n".join(plines), 
                 inline=False
             )
     else:
         embed.add_field(name="🎮 Ігри", value="*Ще немає даних*", inline=False)
 
-    embed.set_footer(text="⭐ Зал Слави • Оновлюється автоматично")
+    embed.set_footer(text="⭐ Зал Слави • Накопичується назавжди")
     return embed
 
-# ── Оновлення Повідомлень (Live Message Updater) ─────────────
 async def update_live_message(guild, bot):
     ch = bot.get_channel(config.GAMING_MONITOR_ID)
     if not ch: return
-    embed = build_live_embed()
-    embed.set_footer(text=midnight_footer())
+    embed = build_live_embed(guild, bot)
     
     if config.live_message_id:
         try:
@@ -192,7 +216,6 @@ async def update_fame_message(guild, bot):
     ch = bot.get_channel(config.GAMING_MONITOR_ID)
     if not ch: return
     embed = build_fame_embed(guild, bot)
-    embed.set_footer(text=midnight_footer())
     
     if config.fame_message_id:
         try:
