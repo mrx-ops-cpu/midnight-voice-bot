@@ -47,7 +47,7 @@ def load_game_sessions():
             
             migrated = {}
             for k, v in raw.items():
-                if "game" in v:
+                if isinstance(v, dict) and "game" in v:
                     migrated[int(k)] = {v["game"]: {"start_time": v["start_time"], "session_start": v.get("session_start", v["start_time"])}}
                 else:
                     migrated[int(k)] = v
@@ -119,8 +119,15 @@ def add_voice_time_only(member_id, duration):
     if duration <= 0: return
     s = load_stats()
     uid = str(member_id)
-    s["total"][uid] = s["total"].get(uid, 0) + duration
-    s["daily"][uid] = s["daily"].get(uid, 0) + duration
+    
+    try:
+        current_total = float(s["total"].get(uid, 0))
+        current_daily = float(s["daily"].get(uid, 0))
+    except:
+        current_total, current_daily = 0.0, 0.0
+        
+    s["total"][uid] = current_total + duration
+    s["daily"][uid] = current_daily + duration
     save_stats(s)
     update_streak(uid)
 
@@ -129,12 +136,17 @@ def add_game_time_only(member_id, duration, game):
     s = load_stats()
     uid = str(member_id)
     
-    if "games" not in s:
+    if "games" not in s or not isinstance(s["games"], dict):
         s["games"] = {}
-    if uid not in s["games"]:
+    if uid not in s["games"] or not isinstance(s["games"][uid], dict):
         s["games"][uid] = {}
         
-    s["games"][uid][game] = s["games"][uid].get(game, 0) + duration
+    try:
+        current_game_time = float(s["games"][uid].get(game, 0))
+    except:
+        current_game_time = 0.0
+        
+    s["games"][uid][game] = current_game_time + duration
     save_stats(s)
     update_streak(uid)
 
@@ -178,24 +190,46 @@ def get_top_games(limit_games=10, limit_players=3):
     s = load_stats()
     gd = {}
     
-    for uid, ug in s.get("games", {}).items():
+    games_data = s.get("games", {})
+    if not isinstance(games_data, dict): 
+        games_data = {}
+    
+    for uid, ug in games_data.items():
+        if not isinstance(ug, dict): continue
+        
         for game, sec in ug.items():
+            try:
+                sec = float(sec)
+            except: continue
+            
             norm_game = normalize_game_name(game)
             if norm_game not in gd:
                 gd[norm_game] = {"total": 0, "players": {}}
+                
             gd[norm_game]["total"] += sec
-            gd[norm_game]["players"][str(uid)] = gd[norm_game]["players"].get(str(uid), 0) + sec
+            
+            uid_str = str(uid)
+            current_player_sec = gd[norm_game]["players"].get(uid_str, 0)
+            gd[norm_game]["players"][uid_str] = current_player_sec + sec
 
     now = datetime.now().timestamp()
+    
     for uid, user_sessions in config.game_sessions.items():
+        if not isinstance(user_sessions, dict): continue
+        
         for game, sess in user_sessions.items():
+            if not isinstance(sess, dict) or "start_time" not in sess: continue
+            
             norm_game = normalize_game_name(game)
             dur = now - sess.get("start_time", now) 
             
             if norm_game not in gd:
                 gd[norm_game] = {"total": 0, "players": {}}
             gd[norm_game]["total"] += dur
-            gd[norm_game]["players"][str(uid)] = gd[norm_game]["players"].get(str(uid), 0) + dur
+            
+            uid_str = str(uid)
+            current_player_sec = gd[norm_game]["players"].get(uid_str, 0)
+            gd[norm_game]["players"][uid_str] = current_player_sec + dur
             
     sorted_g = sorted(gd.items(), key=lambda x: x[1]["total"], reverse=True)
     result = {}

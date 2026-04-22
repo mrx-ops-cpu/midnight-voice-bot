@@ -41,21 +41,34 @@ class TasksCog(commands.Cog):
             dur = now - last
             if dur >= 30: 
                 k = str(uid)
-                s["total"][k] = s["total"].get(k, 0) + dur
-                s["daily"][k] = s["daily"].get(k, 0) + dur
+                try:
+                    s["total"][k] = float(s["total"].get(k, 0)) + dur
+                    s["daily"][k] = float(s["daily"].get(k, 0)) + dur
+                except: pass
                 config.voice_last_save[uid] = now
                 sv += 1
 
         for uid, user_sessions in list(config.game_sessions.items()):
+            if not isinstance(user_sessions, dict): continue
+            
             for game, sess in user_sessions.items():
+                if not isinstance(sess, dict) or "start_time" not in sess: continue
+                
                 dur = now - sess["start_time"]
                 if dur >= 30: 
                     k = str(uid)
                     
-                    if "games" not in s: s["games"] = {}
-                    if k not in s["games"]: s["games"][k] = {}
+                    if "games" not in s or not isinstance(s["games"], dict): 
+                        s["games"] = {}
+                    if k not in s["games"] or not isinstance(s["games"][k], dict): 
+                        s["games"][k] = {}
                     
-                    s["games"][k][game] = s["games"][k].get(game, 0) + dur
+                    try:
+                        current_saved = float(s["games"][k].get(game, 0))
+                    except:
+                        current_saved = 0.0
+                        
+                    s["games"][k][game] = current_saved + dur
                     config.game_sessions[uid][game]["start_time"] = now
                     sg += 1
 
@@ -82,11 +95,13 @@ class TasksCog(commands.Cog):
             dur = now - last
             if dur >= 30: 
                 k = str(uid)
-                s["total"][k] = s["total"].get(k, 0) + dur
-                s["daily"][k] = s["daily"].get(k, 0) + dur
+                try:
+                    s["total"][k] = float(s["total"].get(k, 0)) + dur
+                    s["daily"][k] = float(s["daily"].get(k, 0)) + dur
+                except: pass
                 config.voice_last_save[uid] = now
                 
-        total_daily_sec = sum(s.get("daily", {}).values())
+        total_daily_sec = sum(float(v) for v in s.get("daily", {}).values() if isinstance(v, (int, float)))
         today_str = datetime.now(timezone.utc).strftime("%d.%m")
         s.setdefault("history", {})[today_str] = int(total_daily_sec)
         
@@ -95,7 +110,7 @@ class TasksCog(commands.Cog):
             del s["history"][first_key]
 
         ch = self.bot.get_channel(config.GAMING_LOG_ID)
-        top = sorted(s.get("daily", {}).items(), key=lambda x: x[1], reverse=True)[:5]
+        top = sorted(s.get("daily", {}).items(), key=lambda x: float(x[1]) if isinstance(x[1], (int, float)) else 0, reverse=True)[:5]
         
         s["daily"] = {}
         database.save_stats(s)

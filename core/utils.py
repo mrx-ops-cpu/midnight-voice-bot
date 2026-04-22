@@ -24,6 +24,9 @@ def ensure_ffmpeg():
 FFMPEG_PATH = ensure_ffmpeg()
 
 def format_time(seconds):
+    try: seconds = float(seconds)
+    except: seconds = 0.0
+    
     seconds = max(0, int(seconds))
     m_total = seconds // 60
     if m_total == 0: return "< 1хв"
@@ -118,18 +121,27 @@ def build_live_embed(guild, bot):
     rooms = {}
     
     for uid, user_sessions in config.game_sessions.items():
+        if not isinstance(user_sessions, dict): continue
         for game, sess in user_sessions.items():
+            if not isinstance(sess, dict): continue
+            
             norm_game = database.normalize_game_name(game)
             
             if norm_game not in rooms:
                 room_start = config.active_rooms.get(norm_game, sess.get("session_start", now))
+                try: room_dur = int(now - float(room_start))
+                except: room_dur = 0
+                
                 rooms[norm_game] = {
-                    "room_dur": int(now - room_start),
+                    "room_dur": room_dur,
                     "players": []
                 }
                 
             player_name = database.get_display_name(uid, guild, bot)
-            player_dur = int(now - sess.get("session_start", sess["start_time"]))
+            
+            try: player_dur = int(now - float(sess.get("session_start", sess.get("start_time", now))))
+            except: player_dur = 0
+            
             rooms[norm_game]["players"].append((player_name, player_dur))
         
     sorted_rooms = sorted(rooms.items(), key=lambda x: x[1]["room_dur"], reverse=True)[:10]
@@ -155,9 +167,11 @@ def build_fame_embed(guild, bot):
     for uid, start in config.voice_start_times.items():
         k = str(uid)
         last_save = config.voice_last_save.get(uid, start)
-        total[k] = total.get(k, 0) + (datetime.now().timestamp() - last_save)
+        try:
+            total[k] = float(total.get(k, 0)) + (datetime.now().timestamp() - float(last_save))
+        except: pass
         
-    top3_voice = sorted(total.items(), key=lambda x: x[1], reverse=True)[:3]
+    top3_voice = sorted(total.items(), key=lambda x: float(x[1]) if isinstance(x[1], (int, float)) else 0, reverse=True)[:3]
     voice_lines = []
     for i, (uid, sec) in enumerate(top3_voice):
         name = database.get_display_name(uid, guild, bot)
