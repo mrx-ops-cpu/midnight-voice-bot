@@ -1,7 +1,12 @@
 import os
 import json
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from core import config
+
+def get_kyiv_date():
+    utc_now = datetime.now(timezone.utc)
+    kyiv_now = utc_now + timedelta(hours=3)
+    return kyiv_now.date().isoformat()
 
 def load_stats():
     if os.path.exists(config.STATS_FILE):
@@ -44,7 +49,6 @@ def load_game_sessions():
         try:
             with open(config.GAME_SESSIONS_FILE, "r", encoding="utf-8") as f:
                 raw = json.load(f)
-            
             migrated = {}
             for k, v in raw.items():
                 if isinstance(v, dict) and "game" in v:
@@ -98,57 +102,61 @@ def save_message_ids():
 
 def update_streak(uid):
     s = load_stats()
-    today = date.today().isoformat()
+    today = get_kyiv_date()
     entry = s.setdefault("streaks", {}).get(str(uid), {"last_date": None, "count": 0})
-    if entry["last_date"] == today: return
-    
-    yest = (date.today() - timedelta(days=1)).isoformat()
-    entry["count"] = entry["count"] + 1 if entry["last_date"] == yest else 1
+    if entry["last_date"] == today: 
+        return
+    yest = (datetime.now(timezone.utc) + timedelta(hours=3) - timedelta(days=1)).date().isoformat()
+    if entry["last_date"] == yest:
+        entry["count"] += 1
+    else:
+        entry["count"] = 1
     entry["last_date"] = today
-    
     s["streaks"][str(uid)] = entry
     save_stats(s)
 
 def get_streak(uid):
     entry = load_stats().get("streaks", {}).get(str(uid), {})
-    today = date.today().isoformat()
-    yest  = (date.today() - timedelta(days=1)).isoformat()
-    return entry.get("count", 0) if entry.get("last_date") in (today, yest) else 0
+    today = get_kyiv_date()
+    yest = (datetime.now(timezone.utc) + timedelta(hours=3) - timedelta(days=1)).date().isoformat()
+    if entry.get("last_date") in (today, yest):
+        return entry.get("count", 0)
+    return 0
+
+def reset_streak(uid):
+    s = load_stats()
+    uid_str = str(uid)
+    if uid_str in s.get("streaks", {}):
+        s["streaks"][uid_str]["count"] = 0
+        save_stats(s)
 
 def add_voice_time_only(member_id, duration):
     if duration <= 0: return
     s = load_stats()
     uid = str(member_id)
-    
     try:
         current_total = float(s["total"].get(uid, 0))
         current_daily = float(s["daily"].get(uid, 0))
     except:
         current_total, current_daily = 0.0, 0.0
-        
     s["total"][uid] = current_total + duration
     s["daily"][uid] = current_daily + duration
     save_stats(s)
-    update_streak(uid)
 
 def add_game_time_only(member_id, duration, game):
     if duration <= 0 or not game: return
     s = load_stats()
     uid = str(member_id)
-    
     if "games" not in s or not isinstance(s["games"], dict):
         s["games"] = {}
     if uid not in s["games"] or not isinstance(s["games"][uid], dict):
         s["games"][uid] = {}
-        
     try:
         current_game_time = float(s["games"][uid].get(game, 0))
     except:
         current_game_time = 0.0
-        
     s["games"][uid][game] = current_game_time + duration
     save_stats(s)
-    update_streak(uid)
 
 def get_unsaved_voice_time(user_id):
     if user_id in config.voice_start_times:
@@ -189,51 +197,37 @@ def normalize_game_name(game_name):
 def get_top_games(limit_games=10, limit_players=3):
     s = load_stats()
     gd = {}
-    
     games_data = s.get("games", {})
     if not isinstance(games_data, dict): 
         games_data = {}
-    
     for uid, ug in games_data.items():
         if not isinstance(ug, dict): continue
-        
         for game, sec in ug.items():
             try:
                 sec = float(sec)
             except: continue
-            
             norm_game = normalize_game_name(game)
             if norm_game not in gd:
                 gd[norm_game] = {"total": 0, "players": {}}
-                
             gd[norm_game]["total"] += sec
-            
             uid_str = str(uid)
             current_player_sec = gd[norm_game]["players"].get(uid_str, 0)
             gd[norm_game]["players"][uid_str] = current_player_sec + sec
-
     now = datetime.now().timestamp()
-    
     for uid, user_sessions in config.game_sessions.items():
         if not isinstance(user_sessions, dict): continue
-        
         for game, sess in user_sessions.items():
             if not isinstance(sess, dict) or "start_time" not in sess: continue
-            
             norm_game = normalize_game_name(game)
             dur = now - sess.get("start_time", now) 
-            
             if norm_game not in gd:
                 gd[norm_game] = {"total": 0, "players": {}}
             gd[norm_game]["total"] += dur
-            
             uid_str = str(uid)
             current_player_sec = gd[norm_game]["players"].get(uid_str, 0)
             gd[norm_game]["players"][uid_str] = current_player_sec + dur
-            
     sorted_g = sorted(gd.items(), key=lambda x: x[1]["total"], reverse=True)
     result = {}
-    
     for game, data in sorted_g[:limit_games]:
         sorted_players = sorted(data["players"].items(), key=lambda x: x[1], reverse=True)[:limit_players]
         result[game] = {

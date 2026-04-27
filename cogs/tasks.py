@@ -90,6 +90,21 @@ class TasksCog(commands.Cog):
         now = datetime.now().timestamp()
         s = database.load_stats()
         
+        total_fame = dict(s.get("total", {}))
+        for uid_v, start_v in list(config.voice_start_times.items()):
+            k_v = str(uid_v)
+            last_v = config.voice_last_save.get(uid_v, start_v)
+            total_fame[k_v] = float(total_fame.get(k_v, 0)) + (now - last_v)
+        
+        top3_fame_ids = [str(u) for u, _ in sorted(total_fame.items(), key=lambda x: float(x[1]), reverse=True)[:3]]
+        
+        all_streak_users = list(s.get("streaks", {}).keys())
+        for u_id in set(all_streak_users + top3_fame_ids):
+            if u_id in top3_fame_ids:
+                database.update_streak(u_id)
+            else:
+                database.reset_streak(u_id)
+
         for uid, start in list(config.voice_start_times.items()):
             last = config.voice_last_save.get(uid, start)
             dur = now - last

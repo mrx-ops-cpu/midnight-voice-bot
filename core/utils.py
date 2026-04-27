@@ -12,7 +12,6 @@ from core import config, database
 def ensure_ffmpeg():
     found = shutil.which("ffmpeg")
     if found: return found
-    print("FFmpeg не знайдено — встановлюю (через apt-get)...")
     try:
         subprocess.run(["apt-get", "update", "-qq"], capture_output=True, timeout=60)
         subprocess.run(["apt-get", "install", "-y", "-qq", "ffmpeg"], capture_output=True, timeout=120)
@@ -40,7 +39,7 @@ def midnight_footer():
 
 def streak_emoji(uid):
     s = database.get_streak(uid)
-    return f" 🔥{s}" if s >= 3 else ""
+    return f"|(серія днів {s})" if s > 0 else ""
 
 def check_say_limit(user_id):
     if config.SAY_LIMIT == 0: return True, 0, 0
@@ -75,7 +74,6 @@ async def play_tts(text, guild, bot):
     try:
         ffmpeg = FFMPEG_PATH or shutil.which("ffmpeg")
         if not ffmpeg:
-            print("ERROR play_tts: ffmpeg не знайдено")
             return
             
         tts = gTTS(text=text, lang="uk")
@@ -161,7 +159,8 @@ def build_live_embed(guild, bot):
 def build_fame_embed(guild, bot):
     embed = discord.Embed(title="🏛️ Зал Слави", color=0xf1c40f, timestamp=datetime.now(timezone.utc))
     s = database.load_stats()
-    medals = ["🥇","🥈","🥉","4️⃣","5️⃣"]
+    medals = ["🥇","🥈","🥉","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟"]
+    game_medals = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
 
     total = dict(s.get("total", {}))
     for uid, start in config.voice_start_times.items():
@@ -171,25 +170,26 @@ def build_fame_embed(guild, bot):
             total[k] = float(total.get(k, 0)) + (datetime.now().timestamp() - float(last_save))
         except: pass
         
-    top3_voice = sorted(total.items(), key=lambda x: float(x[1]) if isinstance(x[1], (int, float)) else 0, reverse=True)[:3]
+    top10_voice = sorted(total.items(), key=lambda x: float(x[1]) if isinstance(x[1], (int, float)) else 0, reverse=True)[:10]
     voice_lines = []
-    for i, (uid, sec) in enumerate(top3_voice):
+    for i, (uid, sec) in enumerate(top10_voice):
         name = database.get_display_name(uid, guild, bot)
-        voice_lines.append(f"{medals[i]} **{name}**{streak_emoji(uid)} — `{format_time(sec)}`")
+        medal = medals[i] if i < len(medals) else f"**{i+1}.**"
+        voice_lines.append(f"{medal} **{name}**{streak_emoji(uid)} — {format_time(sec)}")
         
     embed.add_field(name="🎙️ Топ войсу (За весь час)", value="\n".join(voice_lines) if voice_lines else "*Немає даних*", inline=False)
 
     top_games = database.get_top_games(limit_games=10, limit_players=3) 
     if top_games:
-        for game, data in top_games.items():
+        for i, (game, data) in enumerate(top_games.items()):
             plines = []
-            for i, (uid, sec) in enumerate(data["players"]):
+            for j, (uid, sec) in enumerate(data["players"]):
                 name = database.get_display_name(uid, guild, bot)
-                plines.append(f"{medals[i]} {name} — `{format_time(sec)}`")
+                plines.append(f"{medals[j]} {name} — {format_time(sec)}")
             
             embed.add_field(
-                name=f"🎮 {game}  ·  {format_time(data['total'])} загалом", 
-                value="\n".join(plines), 
+                name=f"{game_medals[i]} {game}  ·  {format_time(data['total'])} загалом", 
+                value="\n".join(plines) + "\n──────────────────────────", 
                 inline=False
             )
     else:
