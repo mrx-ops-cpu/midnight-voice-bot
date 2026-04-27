@@ -39,7 +39,11 @@ def midnight_footer():
 
 def streak_emoji(uid):
     s = database.get_streak(uid)
-    return f"|(серія днів {s})" if s > 0 else ""
+    return f" 🔥{s}" if s > 0 else ""
+
+def fame_streak_emoji(uid):
+    s = database.get_fame_streak(uid)
+    return f"|(в топі {s} дн.)" if s > 0 else ""
 
 def check_say_limit(user_id):
     if config.SAY_LIMIT == 0: return True, 0, 0
@@ -159,7 +163,7 @@ def build_live_embed(guild, bot):
 def build_fame_embed(guild, bot):
     embed = discord.Embed(title="🏛️ Зал Слави", color=0xf1c40f, timestamp=datetime.now(timezone.utc))
     s = database.load_stats()
-    medals = ["🥇","🥈","🥉","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟"]
+    medals = ["🥇","🥈","🥉"]
     game_medals = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
 
     total = dict(s.get("total", {}))
@@ -170,14 +174,28 @@ def build_fame_embed(guild, bot):
             total[k] = float(total.get(k, 0)) + (datetime.now().timestamp() - float(last_save))
         except: pass
         
-    top10_voice = sorted(total.items(), key=lambda x: float(x[1]) if isinstance(x[1], (int, float)) else 0, reverse=True)[:10]
+    top3_voice = sorted(total.items(), key=lambda x: float(x[1]) if isinstance(x[1], (int, float)) else 0, reverse=True)[:3]
     voice_lines = []
-    for i, (uid, sec) in enumerate(top10_voice):
+    for i, (uid, sec) in enumerate(top3_voice):
         name = database.get_display_name(uid, guild, bot)
-        medal = medals[i] if i < len(medals) else f"**{i+1}.**"
-        voice_lines.append(f"{medal} **{name}**{streak_emoji(uid)} — {format_time(sec)}")
+        voice_lines.append(f"{medals[i]} **{name}**{fame_streak_emoji(uid)} — `{format_time(sec)}`")
         
     embed.add_field(name="🎙️ Топ войсу (За весь час)", value="\n".join(voice_lines) if voice_lines else "*Немає даних*", inline=False)
+
+    voice_streaks_data = s.get("streaks", {})
+    active_streaks = {}
+    for uid_str, entry in voice_streaks_data.items():
+        streak = database.get_streak(uid_str)
+        if streak > 0:
+            active_streaks[uid_str] = streak
+
+    top3_streaks = sorted(active_streaks.items(), key=lambda x: x[1], reverse=True)[:3]
+    streak_lines = []
+    for i, (uid_str, streak_count) in enumerate(top3_streaks):
+        name = database.get_display_name(uid_str, guild, bot)
+        streak_lines.append(f"{medals[i]} **{name}** — 🔥 `{streak_count} днів підряд`")
+
+    embed.add_field(name="🔥 Топ серії в войсі", value="\n".join(streak_lines) + "\n──────────────────────────" if streak_lines else "*Немає даних*\n──────────────────────────", inline=False)
 
     top_games = database.get_top_games(limit_games=10, limit_players=3) 
     if top_games:
@@ -185,11 +203,11 @@ def build_fame_embed(guild, bot):
             plines = []
             for j, (uid, sec) in enumerate(data["players"]):
                 name = database.get_display_name(uid, guild, bot)
-                plines.append(f"{medals[j]} {name} — {format_time(sec)}")
+                plines.append(f"{medals[j]} {name} — `{format_time(sec)}`")
             
             embed.add_field(
                 name=f"{game_medals[i]} {game}  ·  {format_time(data['total'])} загалом", 
-                value="\n".join(plines) + "\n──────────────────────────", 
+                value="\n".join(plines) + ("\n──────────────────────────" if i < len(top_games)-1 else ""), 
                 inline=False
             )
     else:

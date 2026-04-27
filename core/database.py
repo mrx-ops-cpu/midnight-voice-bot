@@ -13,11 +13,11 @@ def load_stats():
         try:
             with open(config.STATS_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            for k in ("total", "daily", "games", "streaks", "history"):
+            for k in ("total", "daily", "games", "streaks", "fame_streaks", "history"):
                 data.setdefault(k, {})
             return data
         except Exception as e: print(f"ERROR load_stats: {e}")
-    return {"total": {}, "daily": {}, "games": {}, "streaks": {}, "history": {}}
+    return {"total": {}, "daily": {}, "games": {}, "streaks": {}, "fame_streaks": {}, "history": {}}
 
 def save_stats(data):
     try:
@@ -123,11 +123,34 @@ def get_streak(uid):
         return entry.get("count", 0)
     return 0
 
-def reset_streak(uid):
+def update_fame_streak(uid):
+    s = load_stats()
+    today = get_kyiv_date()
+    entry = s.setdefault("fame_streaks", {}).get(str(uid), {"last_date": None, "count": 0})
+    if entry["last_date"] == today: 
+        return
+    yest = (datetime.now(timezone.utc) + timedelta(hours=3) - timedelta(days=1)).date().isoformat()
+    if entry["last_date"] == yest:
+        entry["count"] += 1
+    else:
+        entry["count"] = 1
+    entry["last_date"] = today
+    s["fame_streaks"][str(uid)] = entry
+    save_stats(s)
+
+def get_fame_streak(uid):
+    entry = load_stats().get("fame_streaks", {}).get(str(uid), {})
+    today = get_kyiv_date()
+    yest = (datetime.now(timezone.utc) + timedelta(hours=3) - timedelta(days=1)).date().isoformat()
+    if entry.get("last_date") in (today, yest):
+        return entry.get("count", 0)
+    return 0
+
+def reset_fame_streak(uid):
     s = load_stats()
     uid_str = str(uid)
-    if uid_str in s.get("streaks", {}):
-        s["streaks"][uid_str]["count"] = 0
+    if uid_str in s.get("fame_streaks", {}):
+        s["fame_streaks"][uid_str]["count"] = 0
         save_stats(s)
 
 def add_voice_time_only(member_id, duration):
@@ -142,6 +165,7 @@ def add_voice_time_only(member_id, duration):
     s["total"][uid] = current_total + duration
     s["daily"][uid] = current_daily + duration
     save_stats(s)
+    update_streak(uid)
 
 def add_game_time_only(member_id, duration, game):
     if duration <= 0 or not game: return

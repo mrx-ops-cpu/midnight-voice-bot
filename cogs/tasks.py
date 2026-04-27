@@ -47,6 +47,7 @@ class TasksCog(commands.Cog):
                 except: pass
                 config.voice_last_save[uid] = now
                 sv += 1
+                database.update_streak(uid)
 
         for uid, user_sessions in list(config.game_sessions.items()):
             if not isinstance(user_sessions, dict): continue
@@ -98,12 +99,12 @@ class TasksCog(commands.Cog):
         
         top3_fame_ids = [str(u) for u, _ in sorted(total_fame.items(), key=lambda x: float(x[1]), reverse=True)[:3]]
         
-        all_streak_users = list(s.get("streaks", {}).keys())
-        for u_id in set(all_streak_users + top3_fame_ids):
+        all_fame_users = list(s.get("fame_streaks", {}).keys())
+        for u_id in set(all_fame_users + top3_fame_ids):
             if u_id in top3_fame_ids:
-                database.update_streak(u_id)
+                database.update_fame_streak(u_id)
             else:
-                database.reset_streak(u_id)
+                database.reset_fame_streak(u_id)
 
         for uid, start in list(config.voice_start_times.items()):
             last = config.voice_last_save.get(uid, start)
@@ -115,6 +116,7 @@ class TasksCog(commands.Cog):
                     s["daily"][k] = float(s["daily"].get(k, 0)) + dur
                 except: pass
                 config.voice_last_save[uid] = now
+                database.update_streak(uid)
                 
         total_daily_sec = sum(float(v) for v in s.get("daily", {}).values() if isinstance(v, (int, float)))
         today_str = datetime.now(timezone.utc).strftime("%d.%m")
