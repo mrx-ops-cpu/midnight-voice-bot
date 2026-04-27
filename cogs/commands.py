@@ -10,6 +10,12 @@ class CommandsCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    @commands.command(name="sync")
+    @commands.has_permissions(administrator=True)
+    async def sync_cmd(self, ctx):
+        synced = await self.bot.tree.sync()
+        await ctx.send(f"✅ Примусово синхронізовано {len(synced)} команд! Натисни **Ctrl + R** у Discord, щоб підтягнути всі підказки.")
+
     async def _send_stats(self, interaction: discord.Interaction):
         if not config.GLOBAL_SETTINGS["voice_stats"]:
             return await interaction.response.send_message("❌ Статистика вимкнена", ephemeral=True)
@@ -49,7 +55,7 @@ class CommandsCog(commands.Cog):
             )
             
         embed.set_footer(text=utils.midnight_footer())
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @app_commands.command(name="stats", description="Твоя персональна картка статистики")
     async def stats_cmd(self, interaction: discord.Interaction):
@@ -60,16 +66,18 @@ class CommandsCog(commands.Cog):
         await self._send_stats(interaction)
 
     @app_commands.command(name="leaderboard", description="Топ активності сервера")
-    @app_commands.choices(період=[
+    @app_commands.describe(period="За який період показати статистику?")
+    @app_commands.rename(period="період")
+    @app_commands.choices(period=[
         app_commands.Choice(name="Весь час", value="total"),
         app_commands.Choice(name="Сьогодні", value="daily")
     ])
-    async def leaderboard_cmd(self, interaction: discord.Interaction, період: app_commands.Choice[str]):
+    async def leaderboard_cmd(self, interaction: discord.Interaction, period: app_commands.Choice[str]):
         if not config.GLOBAL_SETTINGS["voice_stats"]:
             return await interaction.response.send_message("❌ Вимкнено", ephemeral=True)
             
         s = database.load_stats()
-        data = dict(s.get(період.value, {}))
+        data = dict(s.get(period.value, {}))
         
         for uid, start in config.voice_start_times.items():
             k = str(uid)
@@ -85,7 +93,7 @@ class CommandsCog(commands.Cog):
             lines.append(f"{medal} {name}{utils.streak_emoji(uid)} — `{utils.format_time(sec)}`")
             
         embed = discord.Embed(
-            title=f"🏆 Топ активності | {період.name}",
+            title=f"🏆 Топ активності | {period.name}",
             description="\n".join(lines) or "Немає даних",
             color=0x2b2d31
         )
@@ -93,12 +101,14 @@ class CommandsCog(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="fullstats", description="Повна інформація по категоріях Залу Слави (Модератори)")
-    @app_commands.choices(категорія=[
+    @app_commands.describe(category="Оберіть категорію для перегляду повного топу")
+    @app_commands.rename(category="категорія")
+    @app_commands.choices(category=[
         app_commands.Choice(name="Топ войсу", value="voice"),
         app_commands.Choice(name="Топ серії войсу", value="streak"),
         app_commands.Choice(name="Топ ігор", value="games")
     ])
-    async def fullstats_cmd(self, interaction: discord.Interaction, категорія: app_commands.Choice[str]):
+    async def fullstats_cmd(self, interaction: discord.Interaction, category: app_commands.Choice[str]):
         if not interaction.guild:
             return await interaction.response.send_message("❌ Цю команду можна використовувати тільки на сервері.", ephemeral=True)
             
@@ -108,7 +118,7 @@ class CommandsCog(commands.Cog):
         s = database.load_stats()
         embed = discord.Embed(color=0xf1c40f, timestamp=datetime.now(timezone.utc))
 
-        if категорія.value == "voice":
+        if category.value == "voice":
             embed.title = "🎙️ Повний Топ Войсу"
             total = dict(s.get("total", {}))
             for uid, start in config.voice_start_times.items():
@@ -127,7 +137,7 @@ class CommandsCog(commands.Cog):
             if len(desc) > 4000: desc = desc[:4000] + "\n... (список завеликий, обрізано)"
             embed.description = desc if desc else "*Немає даних*"
 
-        elif категорія.value == "streak":
+        elif category.value == "streak":
             embed.title = "🔥 Повний Топ Серій Войсу"
             streaks_data = {}
             for u in s.get("streaks", {}).keys():
@@ -144,22 +154,24 @@ class CommandsCog(commands.Cog):
             if len(desc) > 4000: desc = desc[:4000] + "\n... (список завеликий, обрізано)"
             embed.description = desc if desc else "*Немає даних*"
 
-        elif категорія.value == "games":
+        elif category.value == "games":
             embed.title = "🎮 Повний Топ Ігор"
-            top_games = database.get_top_games(limit_games=100, limit_players=50)
+            top_games = database.get_top_games(limit_games=50, limit_players=30)
             
             if not top_games:
                 embed.description = "*Немає даних*"
             else:
+                lines = []
                 for game, data in top_games.items():
-                    plines = []
+                    lines.append(f"\n**🎮 {game}** — `{utils.format_time(data['total'])}`")
                     for j, (uid, sec) in enumerate(data["players"]):
                         name = database.get_display_name(uid, interaction.guild, self.bot)
-                        plines.append(f"**{j+1}.** {name} — `{utils.format_time(sec)}`")
+                        lines.append(f"└ **{j+1}.** {name} — `{utils.format_time(sec)}`")
                         
-                    val = "\n".join(plines)
-                    if len(val) > 1000: val = val[:1000] + "..."
-                    embed.add_field(name=f"🎮 {game} ({utils.format_time(data['total'])})", value=val, inline=False)
+                desc = "\n".join(lines).strip()
+                if len(desc) > 4000: 
+                    desc = desc[:4000] + "\n\n... (список завеликий, частину обрізано)"
+                embed.description = desc
 
         embed.set_footer(text=utils.midnight_footer())
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -177,9 +189,10 @@ class CommandsCog(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="say", description="Озвучити текст у войсі")
-    @app_commands.describe(текст="Що сказати")
-    async def say_cmd(self, interaction: discord.Interaction, текст: str):
-        if len(текст) > 200:
+    @app_commands.describe(text="Що сказати")
+    @app_commands.rename(text="текст")
+    async def say_cmd(self, interaction: discord.Interaction, text: str):
+        if len(text) > 200:
             return await interaction.response.send_message("❌ Максимум 200 символів", ephemeral=True)
             
         vc = discord.utils.get(self.bot.voice_clients, guild=interaction.guild)
@@ -194,20 +207,21 @@ class CommandsCog(commands.Cog):
         utils.record_say_usage(interaction.user.id)
         info = f" _(залишилось {remaining-1}/{config.SAY_LIMIT})_" if config.SAY_LIMIT > 0 else ""
         
-        await interaction.response.send_message(f"🔊 Озвучую: **{текст}**{info}", ephemeral=True)
-        asyncio.create_task(utils.play_tts(текст, interaction.guild, self.bot))
+        await interaction.response.send_message(f"🔊 Озвучую: **{text}**{info}", ephemeral=True)
+        asyncio.create_task(utils.play_tts(text, interaction.guild, self.bot))
 
     @app_commands.command(name="set_say_limit", description="Ліміт /say на годину (0=без ліміту)")
-    @app_commands.describe(ліміт="Кількість на годину")
-    async def set_say_limit_cmd(self, interaction: discord.Interaction, ліміт: int):
+    @app_commands.describe(limit="Кількість на годину")
+    @app_commands.rename(limit="ліміт")
+    async def set_say_limit_cmd(self, interaction: discord.Interaction, limit: int):
         if not interaction.user.guild_permissions.administrator:
             return await interaction.response.send_message("❌ Тільки адміни", ephemeral=True)
-        if ліміт < 0:
+        if limit < 0:
             return await interaction.response.send_message("❌ Від'ємне не можна", ephemeral=True)
             
-        config.SAY_LIMIT = ліміт
-        msg = "🔊 Ліміт вимкнено" if ліміт == 0 else f"🔊 Ліміт: **{ліміт}**/годину"
-        await interaction.response.send_message(msg)
+        config.SAY_LIMIT = limit
+        msg = "🔊 Ліміт вимкнено" if limit == 0 else f"🔊 Ліміт: **{limit}**/годину"
+        await interaction.response.send_message(msg, ephemeral=True)
 
     @app_commands.command(name="ping", description="Затримка та аптайм")
     async def ping_cmd(self, interaction: discord.Interaction):
@@ -222,7 +236,7 @@ class CommandsCog(commands.Cog):
         embed.add_field(name="🔢 Версія", value=f"`{config.GLOBAL_SETTINGS['version']}`", inline=True)
         embed.set_footer(text=utils.midnight_footer())
         
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @app_commands.command(name="midnight_info", description="Статус системи")
     async def midnight_info_cmd(self, interaction: discord.Interaction):
@@ -251,45 +265,51 @@ class CommandsCog(commands.Cog):
             inline=False
         )
         embed.set_footer(text=utils.midnight_footer())
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @app_commands.command(name="set_monitoring", description="Увімкнути/Вимкнути моніторинг ігор")
-    @app_commands.choices(стан=[
+    @app_commands.describe(state="Оберіть стан")
+    @app_commands.rename(state="стан")
+    @app_commands.choices(state=[
         app_commands.Choice(name="Увімкнути", value="on"),
         app_commands.Choice(name="Вимкнути", value="off")
     ])
-    async def set_monitoring_cmd(self, interaction: discord.Interaction, стан: app_commands.Choice[str]):
+    async def set_monitoring_cmd(self, interaction: discord.Interaction, state: app_commands.Choice[str]):
         if not interaction.user.guild_permissions.administrator:
             return await interaction.response.send_message("❌ Тільки адміни", ephemeral=True)
-        config.GLOBAL_SETTINGS["monitoring"] = (стан.value == "on")
-        await interaction.response.send_message(f"📡 Моніторинг: **{'Увімкнено' if config.GLOBAL_SETTINGS['monitoring'] else 'Вимкнено'}**")
+        config.GLOBAL_SETTINGS["monitoring"] = (state.value == "on")
+        await interaction.response.send_message(f"📡 Моніторинг: **{'Увімкнено' if config.GLOBAL_SETTINGS['monitoring'] else 'Вимкнено'}**", ephemeral=True)
 
     @app_commands.command(name="set_voice", description="Увімкнути/Вимкнути войс-гард")
-    @app_commands.choices(стан=[
+    @app_commands.describe(state="Оберіть стан")
+    @app_commands.rename(state="стан")
+    @app_commands.choices(state=[
         app_commands.Choice(name="Увімкнути", value="on"),
         app_commands.Choice(name="Вимкнути", value="off")
     ])
-    async def set_voice_cmd(self, interaction: discord.Interaction, стан: app_commands.Choice[str]):
+    async def set_voice_cmd(self, interaction: discord.Interaction, state: app_commands.Choice[str]):
         if not interaction.user.guild_permissions.administrator:
             return await interaction.response.send_message("❌ Тільки адміни", ephemeral=True)
             
-        config.GLOBAL_SETTINGS["voice_guard"] = (стан.value == "on")
+        config.GLOBAL_SETTINGS["voice_guard"] = (state.value == "on")
         if not config.GLOBAL_SETTINGS["voice_guard"]:
             for vc in self.bot.voice_clients: 
                 await vc.disconnect()
-        await interaction.response.send_message(f"🎙️ Войс-гард: **{'Увімкнено' if config.GLOBAL_SETTINGS['voice_guard'] else 'Вимкнено'}**")
+        await interaction.response.send_message(f"🎙️ Войс-гард: **{'Увімкнено' if config.GLOBAL_SETTINGS['voice_guard'] else 'Вимкнено'}**", ephemeral=True)
 
     @app_commands.command(name="set_stats", description="Увімкнути/Вимкнути збір статистики")
-    @app_commands.choices(стан=[
+    @app_commands.describe(state="Оберіть стан")
+    @app_commands.rename(state="стан")
+    @app_commands.choices(state=[
         app_commands.Choice(name="Увімкнути", value="on"),
         app_commands.Choice(name="Вимкнути", value="off")
     ])
-    async def set_stats_cmd(self, interaction: discord.Interaction, стан: app_commands.Choice[str]):
+    async def set_stats_cmd(self, interaction: discord.Interaction, state: app_commands.Choice[str]):
         if not interaction.user.guild_permissions.administrator:
             return await interaction.response.send_message("❌ Тільки адміни", ephemeral=True)
             
-        config.GLOBAL_SETTINGS["voice_stats"] = (стан.value == "on")
-        await interaction.response.send_message(f"📊 Статистика: **{'Увімкнено' if config.GLOBAL_SETTINGS['voice_stats'] else 'Вимкнено'}**")
+        config.GLOBAL_SETTINGS["voice_stats"] = (state.value == "on")
+        await interaction.response.send_message(f"📊 Статистика: **{'Увімкнено' if config.GLOBAL_SETTINGS['voice_stats'] else 'Вимкнено'}**", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(CommandsCog(bot))
