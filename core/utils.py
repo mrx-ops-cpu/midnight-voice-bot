@@ -197,6 +197,8 @@ def build_fame_embed(guild, bot):
 
     embed.add_field(name="🔥 Топ серії в войсі", value="\n".join(streak_lines) + "\n──────────────────────────" if streak_lines else "*Немає даних*\n──────────────────────────", inline=False)
 
+    embed.add_field(name="🎮 Топ 10 ігор на сервері", value="──────────────────────────", inline=False)
+
     top_games = database.get_top_games(limit_games=10, limit_players=3) 
     if top_games:
         for i, (game, data) in enumerate(top_games.items()):

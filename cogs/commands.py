@@ -92,6 +92,78 @@ class CommandsCog(commands.Cog):
         embed.set_footer(text=utils.midnight_footer())
         await interaction.response.send_message(embed=embed)
 
+    @app_commands.command(name="fullstats", description="Повна інформація по категоріях Залу Слави (Модератори)")
+    @app_commands.choices(категорія=[
+        app_commands.Choice(name="Топ войсу", value="voice"),
+        app_commands.Choice(name="Топ серії войсу", value="streak"),
+        app_commands.Choice(name="Топ ігор", value="games")
+    ])
+    async def fullstats_cmd(self, interaction: discord.Interaction, категорія: app_commands.Choice[str]):
+        if not interaction.guild:
+            return await interaction.response.send_message("❌ Цю команду можна використовувати тільки на сервері.", ephemeral=True)
+            
+        if not any(r.id == config.MODERATOR_ROLE_ID for r in interaction.user.roles):
+            return await interaction.response.send_message("❌ У вас немає прав для використання цієї команди.", ephemeral=True)
+
+        s = database.load_stats()
+        embed = discord.Embed(color=0xf1c40f, timestamp=datetime.now(timezone.utc))
+
+        if категорія.value == "voice":
+            embed.title = "🎙️ Повний Топ Войсу"
+            total = dict(s.get("total", {}))
+            for uid, start in config.voice_start_times.items():
+                k = str(uid)
+                last_save = config.voice_last_save.get(uid, start)
+                try: total[k] = float(total.get(k, 0)) + (datetime.now().timestamp() - float(last_save))
+                except: pass
+            
+            sorted_v = sorted(total.items(), key=lambda x: float(x[1]) if isinstance(x[1], (int, float)) else 0, reverse=True)
+            lines = []
+            for i, (uid, sec) in enumerate(sorted_v):
+                name = database.get_display_name(uid, interaction.guild, self.bot)
+                lines.append(f"**{i+1}.** {name} — `{utils.format_time(sec)}`")
+            
+            desc = "\n".join(lines)
+            if len(desc) > 4000: desc = desc[:4000] + "\n... (список завеликий, обрізано)"
+            embed.description = desc if desc else "*Немає даних*"
+
+        elif категорія.value == "streak":
+            embed.title = "🔥 Повний Топ Серій Войсу"
+            streaks_data = {}
+            for u in s.get("streaks", {}).keys():
+                c = database.get_streak(u)
+                if c > 0: streaks_data[u] = c
+                
+            sorted_s = sorted(streaks_data.items(), key=lambda x: x[1], reverse=True)
+            lines = []
+            for i, (u, c) in enumerate(sorted_s):
+                name = database.get_display_name(u, interaction.guild, self.bot)
+                lines.append(f"**{i+1}.** {name} — 🔥 `{c} днів`")
+                
+            desc = "\n".join(lines)
+            if len(desc) > 4000: desc = desc[:4000] + "\n... (список завеликий, обрізано)"
+            embed.description = desc if desc else "*Немає даних*"
+
+        elif категорія.value == "games":
+            embed.title = "🎮 Повний Топ Ігор"
+            top_games = database.get_top_games(limit_games=100, limit_players=50)
+            
+            if not top_games:
+                embed.description = "*Немає даних*"
+            else:
+                for game, data in top_games.items():
+                    plines = []
+                    for j, (uid, sec) in enumerate(data["players"]):
+                        name = database.get_display_name(uid, interaction.guild, self.bot)
+                        plines.append(f"**{j+1}.** {name} — `{utils.format_time(sec)}`")
+                        
+                    val = "\n".join(plines)
+                    if len(val) > 1000: val = val[:1000] + "..."
+                    embed.add_field(name=f"🎮 {game} ({utils.format_time(data['total'])})", value=val, inline=False)
+
+        embed.set_footer(text=utils.midnight_footer())
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
     @app_commands.command(name="games", description="Хто грає зараз")
     async def games_cmd(self, interaction: discord.Interaction):
         embed = utils.build_live_embed(interaction.guild, self.bot)
@@ -170,7 +242,7 @@ class CommandsCog(commands.Cog):
     @app_commands.command(name="help", description="Список команд")
     async def help_cmd(self, interaction: discord.Interaction):
         embed = discord.Embed(title="🌑 Midnight Bot | Допомога", color=0x2b2d31)
-        embed.add_field(name="📊 Статистика", value="`/stats` `/leaderboard`", inline=False)
+        embed.add_field(name="📊 Статистика", value="`/stats` `/leaderboard` `/fullstats`", inline=False)
         embed.add_field(name="🎮 Геймінг", value="`/games` `/kings`", inline=False)
         embed.add_field(name="🎙️ Войс", value="`/say` `/set_say_limit`", inline=False)
         embed.add_field(
