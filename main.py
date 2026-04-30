@@ -94,7 +94,8 @@ def keep_alive():
 INITIAL_EXTENSIONS = [
     'cogs.events',
     'cogs.commands',
-    'cogs.tasks'
+    'cogs.tasks',
+    'cogs.faceit'
 ]
 
 @bot.event

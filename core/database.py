@@ -259,3 +259,19 @@ def get_top_games(limit_games=10, limit_players=3):
             "total":   data["total"]
         }
     return result
+
+def load_faceit_users():
+    if os.path.exists(config.FACEIT_FILE):
+        try:
+            with open(config.FACEIT_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except: pass
+    return {}
+
+def save_faceit_users(data):
+    try:
+        tmp_file = config.FACEIT_FILE + ".tmp"
+        with open(tmp_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_file, config.FACEIT_FILE)
+    except: pass
