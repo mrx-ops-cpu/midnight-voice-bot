@@ -3,3 +3,4 @@ flask
 gTTS
 PyNaCl
 python-dotenv
+aiohttp
