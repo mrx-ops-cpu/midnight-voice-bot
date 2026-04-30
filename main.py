@@ -15,6 +15,7 @@ intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='!', intents=intents, chunk_guilds_at_startup=True)
 
 app = Flask(__name__, template_folder="templates")
+bot.app = app
 
 @app.route('/')
 def home():
@@ -95,7 +96,8 @@ INITIAL_EXTENSIONS = [
     'cogs.events',
     'cogs.commands',
     'cogs.tasks',
-    'cogs.faceit'
+    'cogs.faceit',
+    'cogs.faceit_webhooks'
 ]
 
 @bot.event

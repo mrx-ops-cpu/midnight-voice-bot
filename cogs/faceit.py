@@ -1,7 +1,7 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-from core import database, faceit_api
+from core import config, database, faceit_api
 
 class FaceitView(discord.ui.View):
     def __init__(self, target_name: str, caller_name: str):
@@ -65,7 +65,35 @@ class FaceitCog(commands.Cog):
 
         embed = discord.Embed(
             title="⬛ Реєстрація Faceit",
-            description=f"▫️ **Користувач:** {interaction.user.mention}\n▫️ **Faceit:** `{nickname}`\n\n▪️ *Акаунт успішно збережено.*",
+            description=f"▫️ **Користувач:** {interaction.user.mention}\n▫️ **Faceit:** `{nickname}`\n\n▪️ *Акаунт успішно збережено в базі.*",
+            color=0x2b2d31
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="unlink_faceit", description="Відв'язати Faceit акаунт")
+    @app_commands.describe(member="Користувач (тільки для модераторів)")
+    async def unlink_faceit(self, interaction: discord.Interaction, member: discord.Member = None):
+        target = member or interaction.user
+        
+        if target.id != interaction.user.id:
+            has_mod = any(role.id == config.MODERATOR_ROLE_ID for role in interaction.user.roles)
+            if not has_mod:
+                embed = discord.Embed(description="▪️ У вас немає прав для відв'язки чужих акаунтів.", color=0x000000)
+                return await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+        users = database.load_faceit_users()
+        target_str_id = str(target.id)
+        
+        if target_str_id not in users:
+            embed = discord.Embed(description=f"▪️ {target.mention} не має прив'язаного Faceit акаунту.", color=0x000000)
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
+            
+        del users[target_str_id]
+        database.save_faceit_users(users)
+        
+        embed = discord.Embed(
+            title="⬛ Відв'язка Faceit",
+            description=f"▫️ **Користувач:** {target.mention}\n\n▪️ *Акаунт успішно видалено з бази.*",
             color=0x2b2d31
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
