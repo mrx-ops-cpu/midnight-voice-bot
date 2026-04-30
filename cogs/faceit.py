@@ -35,7 +35,7 @@ class FaceitView(discord.ui.View):
     @discord.ui.button(label="Порівняти зі мною", emoji="⚔️", style=discord.ButtonStyle.secondary)
     async def compare_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not self.caller_name:
-            embed = discord.Embed(description="▪️ У вас не прив'язаний Faceit акаунт. Використайте `/link_faceit`.", color=0x000000)
+            embed = discord.Embed(description="▪️ У вас не прив'язаний Faceit акаунт. Використайте `/faceit link`.", color=0x000000)
             return await interaction.response.send_message(embed=embed, ephemeral=True)
 
         if self.target_name == self.caller_name:
@@ -56,9 +56,11 @@ class FaceitCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="link_faceit", description="Прив'язати Faceit акаунт")
+    faceit_group = app_commands.Group(name="faceit", description="Система Faceit")
+
+    @faceit_group.command(name="link", description="Прив'язати Faceit акаунт")
     @app_commands.describe(nickname="Faceit нікнейм")
-    async def link_faceit(self, interaction: discord.Interaction, nickname: str):
+    async def link_cmd(self, interaction: discord.Interaction, nickname: str):
         users = database.load_faceit_users()
         users[str(interaction.user.id)] = nickname
         database.save_faceit_users(users)
@@ -70,9 +72,9 @@ class FaceitCog(commands.Cog):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="unlink_faceit", description="Відв'язати Faceit акаунт")
-    @app_commands.describe(member="Користувач (тільки для модераторів)")
-    async def unlink_faceit(self, interaction: discord.Interaction, member: discord.Member = None):
+    @faceit_group.command(name="unlink", description="Відв'язати Faceit акаунт")
+    @app_commands.describe(member="Користувач (чужі акаунти можуть відв'язувати лише модератори)")
+    async def unlink_cmd(self, interaction: discord.Interaction, member: discord.Member = None):
         target = member or interaction.user
         
         if target.id != interaction.user.id:
@@ -98,9 +100,9 @@ class FaceitCog(commands.Cog):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="faceit", description="Переглянути Faceit профіль")
+    @faceit_group.command(name="profile", description="Переглянути Faceit профіль")
     @app_commands.describe(member="Користувач (за замовчуванням - ви)")
-    async def faceit_profile(self, interaction: discord.Interaction, member: discord.Member = None):
+    async def profile_cmd(self, interaction: discord.Interaction, member: discord.Member = None):
         target = member or interaction.user
         users = database.load_faceit_users()
 

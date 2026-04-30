@@ -10,7 +10,6 @@ class FaceitWebhooksCog(commands.Cog):
         self.bot.app.add_url_rule('/faceit_webhook', 'faceit_webhook', self.handle_webhook, methods=['POST'])
 
     def handle_webhook(self):
-        """Обробник POST-запитів від Faceit"""
         data = request.json
         if not data:
             return jsonify({"status": "error", "message": "No data received"}), 400
@@ -23,7 +22,6 @@ class FaceitWebhooksCog(commands.Cog):
         return jsonify({"status": "success"}), 200
 
     async def process_match_report(self, payload: dict):
-        """Аналізує матч, шукає наших гравців і генерує звіт"""
         match_id = payload.get('id')
         teams = payload.get('teams', [])
         
@@ -33,7 +31,6 @@ class FaceitWebhooksCog(commands.Cog):
         for team in teams:
             for player in team.get('roster', []):
                 faceit_name = player.get('nickname')
-                
                 discord_id = next((discord_id for discord_id, name in users.items() if name == faceit_name), None)
                 
                 if discord_id:
@@ -70,7 +67,7 @@ class FaceitWebhooksCog(commands.Cog):
                 lowest_kd = p['kd']
 
         if ruiner:
-            comment = await faceit_api.generate_ruiner_comment(ruiner['kd'], ruiner['adr'])
+            comment = "🤡 Головний руїнер матчу! Навіть боти грають краще."
             embed.add_field(name="🤡 Система Руїнера", value=f"<@{ruiner['discord_id']}> {comment}", inline=False)
 
         channel = self.bot.get_channel(config.GAMING_LOG_ID)

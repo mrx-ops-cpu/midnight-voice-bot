@@ -10,6 +10,9 @@ class CommandsCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    stats_group = app_commands.Group(name="stats", description="Статистика активності та ігор")
+    set_group = app_commands.Group(name="set", description="Налаштування системи (Admin)")
+
     @commands.command(name="sync")
     @commands.has_permissions(administrator=True)
     async def sync_cmd(self, ctx):
@@ -57,22 +60,18 @@ class CommandsCog(commands.Cog):
         embed.set_footer(text=utils.midnight_footer())
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="stats", description="Твоя персональна картка статистики")
-    async def stats_cmd(self, interaction: discord.Interaction):
+    @stats_group.command(name="profile", description="Твоя персональна картка статистики")
+    async def stats_profile(self, interaction: discord.Interaction):
         await self._send_stats(interaction)
 
-    @app_commands.command(name="mystats", description="Твоя персональна картка статистики (Аліас)")
-    async def mystats_cmd(self, interaction: discord.Interaction):
-        await self._send_stats(interaction)
-
-    @app_commands.command(name="leaderboard", description="Топ активності сервера")
+    @stats_group.command(name="top", description="Топ активності сервера")
     @app_commands.describe(period="За який період показати статистику?")
     @app_commands.rename(period="період")
     @app_commands.choices(period=[
         app_commands.Choice(name="Весь час", value="total"),
         app_commands.Choice(name="Сьогодні", value="daily")
     ])
-    async def leaderboard_cmd(self, interaction: discord.Interaction, period: app_commands.Choice[str]):
+    async def stats_top(self, interaction: discord.Interaction, period: app_commands.Choice[str]):
         if not config.GLOBAL_SETTINGS["voice_stats"]:
             return await interaction.response.send_message("❌ Вимкнено", ephemeral=True)
             
@@ -100,7 +99,7 @@ class CommandsCog(commands.Cog):
         embed.set_footer(text=utils.midnight_footer())
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="fullstats", description="Повна інформація по категоріях Залу Слави (Модератори)")
+    @stats_group.command(name="full", description="Повна інформація по категоріях Залу Слави (Модератори)")
     @app_commands.describe(category="Оберіть категорію для перегляду повного топу")
     @app_commands.rename(category="категорія")
     @app_commands.choices(category=[
@@ -108,7 +107,7 @@ class CommandsCog(commands.Cog):
         app_commands.Choice(name="Топ серії войсу", value="streak"),
         app_commands.Choice(name="Топ ігор", value="games")
     ])
-    async def fullstats_cmd(self, interaction: discord.Interaction, category: app_commands.Choice[str]):
+    async def stats_full(self, interaction: discord.Interaction, category: app_commands.Choice[str]):
         if not interaction.guild:
             return await interaction.response.send_message("❌ Цю команду можна використовувати тільки на сервері.", ephemeral=True)
             
@@ -176,14 +175,14 @@ class CommandsCog(commands.Cog):
         embed.set_footer(text=utils.midnight_footer())
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="games", description="Хто грає зараз")
-    async def games_cmd(self, interaction: discord.Interaction):
+    @stats_group.command(name="games", description="Хто грає зараз")
+    async def stats_games(self, interaction: discord.Interaction):
         embed = utils.build_live_embed(interaction.guild, self.bot)
         embed.set_footer(text=utils.midnight_footer())
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="kings", description="Зал Слави")
-    async def kings_cmd(self, interaction: discord.Interaction):
+    @stats_group.command(name="kings", description="Зал Слави")
+    async def stats_kings(self, interaction: discord.Interaction):
         embed = utils.build_fame_embed(interaction.guild, self.bot)
         embed.set_footer(text=utils.midnight_footer())
         await interaction.response.send_message(embed=embed)
@@ -210,7 +209,7 @@ class CommandsCog(commands.Cog):
         await interaction.response.send_message(f"🔊 Озвучую: **{text}**{info}", ephemeral=True)
         asyncio.create_task(utils.play_tts(text, interaction.guild, self.bot))
 
-    @app_commands.command(name="set_say_limit", description="Ліміт /say на годину (0=без ліміту)")
+    @set_group.command(name="say_limit", description="Ліміт /say на годину (0=без ліміту)")
     @app_commands.describe(limit="Кількість на годину")
     @app_commands.rename(limit="ліміт")
     async def set_say_limit_cmd(self, interaction: discord.Interaction, limit: int):
@@ -238,8 +237,8 @@ class CommandsCog(commands.Cog):
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="midnight_info", description="Статус системи")
-    async def midnight_info_cmd(self, interaction: discord.Interaction):
+    @app_commands.command(name="info", description="Статус системи")
+    async def info_cmd(self, interaction: discord.Interaction):
         embed = discord.Embed(title="🌑 Midnight Bot | Status", color=0x2b2d31)
         for label, key in [("🎮 Моніторинг", "monitoring"), ("🎙️ Войс-гард", "voice_guard"), ("📊 Статистика", "voice_stats")]:
             embed.add_field(name=label, value=f"`{'🟢 ON' if config.GLOBAL_SETTINGS[key] else '🔴 OFF'}`", inline=True)
@@ -256,18 +255,19 @@ class CommandsCog(commands.Cog):
     @app_commands.command(name="help", description="Список команд")
     async def help_cmd(self, interaction: discord.Interaction):
         embed = discord.Embed(title="🌑 Midnight Bot | Допомога", color=0x2b2d31)
-        embed.add_field(name="📊 Статистика", value="`/stats` `/leaderboard` `/fullstats`", inline=False)
-        embed.add_field(name="🎮 Геймінг", value="`/games` `/kings`", inline=False)
-        embed.add_field(name="🎙️ Войс", value="`/say` `/set_say_limit`", inline=False)
+        embed.add_field(name="📊 Статистика", value="`/stats profile` `/stats top` `/stats full`", inline=False)
+        embed.add_field(name="🎮 Геймінг", value="`/stats games` `/stats kings`", inline=False)
+        embed.add_field(name="🌐 Faceit", value="`/faceit link` `/faceit unlink` `/faceit profile`", inline=False)
+        embed.add_field(name="🎙️ Войс та Інше", value="`/say` `/ping` `/info`", inline=False)
         embed.add_field(
-            name="⚙️ Система",
-            value="`/ping` `/midnight_info` `/set_monitoring` `/set_voice` `/set_stats`",
+            name="⚙️ Система (Admin)",
+            value="`/set monitoring` `/set voice` `/set stats` `/set say_limit`",
             inline=False
         )
         embed.set_footer(text=utils.midnight_footer())
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="set_monitoring", description="Увімкнути/Вимкнути моніторинг ігор")
+    @set_group.command(name="monitoring", description="Увімкнути/Вимкнути моніторинг ігор")
     @app_commands.describe(state="Оберіть стан")
     @app_commands.rename(state="стан")
     @app_commands.choices(state=[
@@ -280,7 +280,7 @@ class CommandsCog(commands.Cog):
         config.GLOBAL_SETTINGS["monitoring"] = (state.value == "on")
         await interaction.response.send_message(f"📡 Моніторинг: **{'Увімкнено' if config.GLOBAL_SETTINGS['monitoring'] else 'Вимкнено'}**", ephemeral=True)
 
-    @app_commands.command(name="set_voice", description="Увімкнути/Вимкнути войс-гард")
+    @set_group.command(name="voice", description="Увімкнути/Вимкнути войс-гард")
     @app_commands.describe(state="Оберіть стан")
     @app_commands.rename(state="стан")
     @app_commands.choices(state=[
@@ -297,7 +297,7 @@ class CommandsCog(commands.Cog):
                 await vc.disconnect()
         await interaction.response.send_message(f"🎙️ Войс-гард: **{'Увімкнено' if config.GLOBAL_SETTINGS['voice_guard'] else 'Вимкнено'}**", ephemeral=True)
 
-    @app_commands.command(name="set_stats", description="Увімкнути/Вимкнути збір статистики")
+    @set_group.command(name="stats", description="Увімкнути/Вимкнути збір статистики")
     @app_commands.describe(state="Оберіть стан")
     @app_commands.rename(state="стан")
     @app_commands.choices(state=[
