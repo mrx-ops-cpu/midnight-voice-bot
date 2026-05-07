@@ -96,8 +96,6 @@ INITIAL_EXTENSIONS = [
     'cogs.events',
     'cogs.commands',
     'cogs.tasks',
-    'cogs.faceit',
-    'cogs.faceit_webhooks'
 ]
 
 @bot.event
