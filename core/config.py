@@ -33,5 +33,8 @@ active_rooms      = {}
 live_message_id   = None
 fame_message_id   = None
 
+last_live_hash    = None
+last_fame_hash    = None
+
 SAY_LIMIT         = 3
 say_usage         = {}
