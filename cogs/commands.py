@@ -264,7 +264,7 @@ class CommandsCog(commands.Cog):
         
         embed = discord.Embed(
             title="⬛ Резервне копіювання",
-            description="▫️ Усі бази даних (статистика, сесії, Faceit) успішно запаковані.\n▪️ *Збережи цей архів.*",
+            description="▫️ Усі бази даних (статистика, сесії,) успішно запаковані.\n▪️ *Збережи цей архів.*",
             color=0x2b2d31
         )
         embed.set_footer(text=utils.midnight_footer())
