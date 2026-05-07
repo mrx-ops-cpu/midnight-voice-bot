@@ -254,62 +254,48 @@ class CommandsCog(commands.Cog):
         embed.set_thumbnail(url=config.GLOBAL_SETTINGS["image_url"])
         embed.set_footer(text=utils.midnight_footer())
         await interaction.response.send_message(embed=embed, ephemeral=True)
-        @app_commands.command(name="backup", description="Створити резервну копію всіх баз даних")
+
+    @app_commands.command(name="backup", description="Створити резервну копію")
     @app_commands.default_permissions(administrator=True)
     async def backup_cmd(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True) # Бот "думає", це бачиш тільки ти
-        
-        # Створюємо тимчасовий ZIP-архів із папки data
+        await interaction.response.defer(ephemeral=True)
         zip_filename = "midnight_backup"
         zip_path = shutil.make_archive(zip_filename, 'zip', config.DATA_DIR)
         
         embed = discord.Embed(
             title="⬛ Резервне копіювання",
-            description="▫️ Усі бази даних (статистика, сесії, Faceit) успішно запаковані.\n▪️ *Збережи цей архів у надійному місці.*",
+            description="▫️ Усі бази даних (статистика, сесії, Faceit) успішно запаковані.\n▪️ *Збережи цей архів.*",
             color=0x2b2d31
         )
         embed.set_footer(text=utils.midnight_footer())
-        
-        # Відправляємо архів тобі в приватне/приховане повідомлення
         await interaction.followup.send(embed=embed, file=discord.File(zip_path))
-        
-        # Видаляємо тимчасовий архів із сервера після відправки
         os.remove(zip_path)
 
-    @app_commands.command(name="restore", description="Відновити базу даних з архіву")
-    @app_commands.describe(archive="ZIP архів, який видала команда /backup")
+    # === І ОДРАЗУ ПІД НИМ РЕСТОР ===
+    @app_commands.command(name="restore", description="Відновити базу з архіву")
+    @app_commands.describe(archive="ZIP архів від команди /backup")
     @app_commands.default_permissions(administrator=True)
     async def restore_cmd(self, interaction: discord.Interaction, archive: discord.Attachment):
         if not archive.filename.endswith('.zip'):
-            return await interaction.response.send_message("❌ Помилка: Потрібен файл формату .zip!", ephemeral=True)
+            return await interaction.response.send_message("❌ Потрібен .zip!", ephemeral=True)
             
         await interaction.response.defer(ephemeral=True)
-        
-        # Зберігаємо завантажений архів у тимчасову папку
         temp_dir = tempfile.mkdtemp()
         temp_zip_path = os.path.join(temp_dir, archive.filename)
         await archive.save(temp_zip_path)
         
         try:
-            # Розпаковуємо архів прямо в робочу папку бота, перезаписуючи старі файли
             shutil.unpack_archive(temp_zip_path, config.DATA_DIR)
-            
-            # Оновлюємо кеш (щоб бот підтягнув нові дані в оперативну пам'ять)
             database.load_stats()
             database.load_voice_sessions()
             database.load_game_sessions()
             database.load_active_rooms()
             
-            embed = discord.Embed(
-                title="⬛ Відновлення даних",
-                description="▫️ Базу даних успішно відновлено з архіву!\n▪️ *Усі зміни вже застосовано.*",
-                color=0x2b2d31
-            )
+            embed = discord.Embed(title="⬛ Відновлення даних", description="▫️ Успішно!", color=0x2b2d31)
             await interaction.followup.send(embed=embed)
         except Exception as e:
-            await interaction.followup.send(f"❌ Сталася помилка при розпакуванні: {e}")
+            await interaction.followup.send(f"❌ Помилка: {e}")
         finally:
-            # Прибираємо за собою сміття
             shutil.rmtree(temp_dir)
 
     @app_commands.command(name="help", description="Список команд")
