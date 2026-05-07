@@ -303,7 +303,6 @@ class CommandsCog(commands.Cog):
         embed = discord.Embed(title="🌑 Midnight Bot | Допомога", color=0x2b2d31)
         embed.add_field(name="📊 Статистика", value="`/stats profile` `/stats top` `/stats full`", inline=False)
         embed.add_field(name="🎮 Геймінг", value="`/stats games` `/stats kings`", inline=False)
-        embed.add_field(name="🌐 Faceit", value="`/faceit link` `/faceit unlink` `/faceit profile`", inline=False)
         embed.add_field(name="🎙️ Войс та Інше", value="`/say` `/ping` `/info`", inline=False)
         embed.add_field(
             name="⚙️ Система (Admin)",
