@@ -4,6 +4,8 @@ import os
 import shutil
 import subprocess
 import tempfile
+import hashlib
+import json
 from datetime import datetime, timezone
 from gtts import gTTS
 
@@ -44,6 +46,13 @@ def streak_emoji(uid):
 def fame_streak_emoji(uid):
     s = database.get_fame_streak(uid)
     return f"|(в топі {s} дн.)" if s > 0 else ""
+
+def get_embed_hash(embed: discord.Embed) -> str:
+    """Створює унікальний хеш для вмісту embed (ігноруючи час оновлення)"""
+    d = embed.to_dict()
+    if 'timestamp' in d:
+        del d['timestamp']
+    return hashlib.md5(json.dumps(d, sort_keys=True).encode('utf-8')).hexdigest()
 
 def check_say_limit(user_id):
     if config.SAY_LIMIT == 0: return True, 0, 0
@@ -223,10 +232,15 @@ async def update_live_message(guild, bot):
     if not ch: return
     embed = build_live_embed(guild, bot)
     
+    current_hash = get_embed_hash(embed)
+    if getattr(config, 'last_live_hash', None) == current_hash:
+        return # Якщо вміст не змінився — пропускаємо запит до Discord
+        
     if config.live_message_id:
         try:
             msg = await ch.fetch_message(config.live_message_id)
             await msg.edit(embed=embed)
+            config.last_live_hash = current_hash
             return
         except discord.NotFound:
             config.live_message_id = None
@@ -236,12 +250,14 @@ async def update_live_message(guild, bot):
             if msg.author.id == bot.user.id and msg.embeds and "Активні" in (msg.embeds[0].title or ""):
                 config.live_message_id = msg.id
                 await msg.edit(embed=embed)
+                config.last_live_hash = current_hash
                 database.save_message_ids()
                 return
     except: pass
     
     msg = await ch.send(embed=embed)
     config.live_message_id = msg.id
+    config.last_live_hash = current_hash
     database.save_message_ids()
 
 async def update_fame_message(guild, bot):
@@ -249,10 +265,15 @@ async def update_fame_message(guild, bot):
     if not ch: return
     embed = build_fame_embed(guild, bot)
     
+    current_hash = get_embed_hash(embed)
+    if getattr(config, 'last_fame_hash', None) == current_hash:
+        return # Якщо вміст не змінився — пропускаємо запит до Discord
+        
     if config.fame_message_id:
         try:
             msg = await ch.fetch_message(config.fame_message_id)
             await msg.edit(embed=embed)
+            config.last_fame_hash = current_hash
             return
         except discord.NotFound:
             config.fame_message_id = None
@@ -262,10 +283,12 @@ async def update_fame_message(guild, bot):
             if msg.author.id == bot.user.id and msg.embeds and "Слави" in (msg.embeds[0].title or ""):
                 config.fame_message_id = msg.id
                 await msg.edit(embed=embed)
+                config.last_fame_hash = current_hash
                 database.save_message_ids()
                 return
     except: pass
     
     msg = await ch.send(embed=embed)
     config.fame_message_id = msg.id
+    config.last_fame_hash = current_hash
     database.save_message_ids()
