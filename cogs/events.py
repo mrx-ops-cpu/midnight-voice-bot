@@ -47,12 +47,6 @@ class EventsCog(commands.Cog):
             database.save_voice_sessions()
             print(f"JOIN: {member.name}")
 
-        if not before.channel and after.channel:
-            config.voice_start_times[member.id] = now
-            config.voice_last_save[member.id] = now
-            database.save_voice_sessions()
-            print(f"JOIN: {member.name}")
-
             vc = discord.utils.get(self.bot.voice_clients, guild=member.guild)
             if vc and vc.channel and after.channel.id == vc.channel.id:
                 greeting = f"Привіт, {member.display_name}!"
