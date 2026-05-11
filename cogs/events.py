@@ -28,8 +28,11 @@ class EventsCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+        self.last_greeted = {}
+
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
+
         if member.id == self.bot.user.id and before.channel and not after.channel:
             if config.GLOBAL_SETTINGS["voice_guard"]:
                 await asyncio.sleep(5)
@@ -47,16 +50,6 @@ class EventsCog(commands.Cog):
             database.save_voice_sessions()
             print(f"JOIN: {member.name}")
 
-            vc = discord.utils.get(self.bot.voice_clients, guild=member.guild)
-            if vc and vc.channel and after.channel.id == vc.channel.id:
-                greeting = f"Привіт, {member.display_name}!"
-
-                async def delayed_greeting():
-                    await asyncio.sleep(1.5)
-                    await utils.play_tts(greeting, member.guild, self.bot)
-
-                self.bot.loop.create_task(delayed_greeting())
-
         elif before.channel and not after.channel:
             if member.id in config.voice_start_times:
                 start_time = config.voice_start_times.pop(member.id)
@@ -65,6 +58,24 @@ class EventsCog(commands.Cog):
                 
                 database.add_voice_time_only(member.id, duration)
                 database.save_voice_sessions()
+
+        if after.channel and before.channel != after.channel:
+            vc = discord.utils.get(self.bot.voice_clients, guild=member.guild)
+            
+            if vc and vc.channel and after.channel.id == vc.channel.id:
+                
+                last_time = self.last_greeted.get(member.id, 0)
+                
+                if now - last_time > 1800: 
+                    self.last_greeted[member.id] = now
+                    
+                    greeting = f"Привіт, {member.display_name}!"
+                    
+                    async def delayed_greeting():
+                        await asyncio.sleep(1.5)
+                        await utils.play_tts(greeting, member.guild, self.bot)
+                    
+                    self.bot.loop.create_task(delayed_greeting())
 
     @commands.Cog.listener()
     async def on_presence_update(self, before, after):
