@@ -50,7 +50,12 @@ class EventsCog(commands.Cog):
             vc = discord.utils.get(self.bot.voice_clients, guild=member.guild)
             if vc and vc.channel and after.channel.id == vc.channel.id:
                 greeting = f"Привіт, {member.display_name}!"
-                self.bot.loop.create_task(utils.play_tts(greeting, member.guild, self.bot))
+
+                async def delayed_greeting():
+                    await asyncio.sleep(1.5)
+                    await utils.play_tts(greeting, member.guild, self.bot)
+
+                self.bot.loop.create_task(delayed_greeting())
 
         elif before.channel and not after.channel:
             if member.id in config.voice_start_times:
