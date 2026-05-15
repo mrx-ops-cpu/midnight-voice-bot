@@ -370,7 +370,7 @@ class CommandsCog(commands.Cog):
         clean_token = tokenGem.strip()
 
         # Використовуємо -latest для певності
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={clean_token}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-latest:generateContent?key={clean_token}"
 
         # Промт що відповідає за поведінку бота
         systemStyle = "Ти на діскорд сервері з ГТА5 під назвою 'MidNight'. Веди себе добре та відповідай коротко."
