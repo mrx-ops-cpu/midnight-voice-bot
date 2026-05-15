@@ -358,3 +358,46 @@ class CommandsCog(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(CommandsCog(bot))
+
+
+@app_commands.command(name="ai", description="Запитати ШІ (Gemini)")
+@app_commands.describe(prompt="Що хочеш запитати?")
+async def ask_gemini_cmd(self, interaction: discord.Interaction, prompt: str):
+    # Відкладаємо відповідь, бо запит до API займає час
+    await interaction.response.defer(ephemeral=False)
+
+    tokenGem = os.environ.get("GEMINI_API_KEY")
+    if not tokenGem:
+        return await interaction.followup.send("❌ Токен Gemini не знайдено у .env файлі.")
+
+    # Посилання на бота в середині якого є модель геміні (МБ колись застаріє треба буде міняти)
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={tokenGem}"
+
+    # Промт що відповідає за поведінку бота
+    systemStyle = "Ти на діскорд сервері з ГТА5 під назвою 'MidNight'. Веди себе добре та відповідай коротко."
+
+    payload = {
+        "system_instruction": {
+            "parts": [{"text": systemStyle}]
+        },
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }]
+    }
+
+    import aiohttp
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, json=payload) as response:
+            if response.status == 200:
+                data = await response.json()
+                try:
+                    answer = data["candidates"][0]["content"]["parts"][0]["text"]
+                except (KeyError, IndexError):
+                    answer = "❌ Помилка обробки відповіді від ШІ."
+            else:
+                answer = f"❌ Помилка API Gemini: {response.status}"
+
+    if len(answer) > 1900:
+        answer = answer[:1900] + "..."
+
+    await interaction.followup.send(f"**Запит:** {prompt}\n**MidNight AI:** {answer}")
