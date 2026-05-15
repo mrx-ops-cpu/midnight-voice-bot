@@ -359,57 +359,65 @@ class CommandsCog(commands.Cog):
     @app_commands.command(name="ai", description="Запитати ШІ (Gemini)")
     @app_commands.describe(prompt="Що хочеш запитати?")
     async def ask_gemini_cmd(self, interaction: discord.Interaction, prompt: str):
-        # Відкладаємо відповідь
-        await interaction.response.defer(ephemeral=False)
+        try:
+            # 1. Відразу даємо знати Дискорду, що ми думаємо (щоб не було тайм-ауту 3 сек)
+            await interaction.response.defer(ephemeral=False)
+        except Exception as e:
+            print(f"Помилка defer: {e}")
+            return
 
-        tokenGem = os.environ.get("GEMINI_API_KEY")
-        if not tokenGem:
-            return await interaction.followup.send("❌ Токен Gemini не знайдено у .env файлі.")
+        try:
+            import os
+            import aiohttp
 
-        clean_token = tokenGem.strip()
+            tokenGem = os.environ.get("GEMINI_API_KEY")
+            if not tokenGem:
+                return await interaction.followup.send("❌ Токен Gemini не знайдено у .env файлі.")
 
-        # Посилання яке містить модель бота (МБ колись треба буде поміняти)
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={clean_token}"
+            clean_token = tokenGem.strip()
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={clean_token}"
 
-        # Промт що відповідає за поведінку бота
-        systemStyle = "Ти на діскорд сервері з ГТА5 під назвою 'MidNight'. Веди себе добре та відповідай коротко."
+            systemStyle = "Ти на діскорд сервері з ГТА5 під назвою 'MidNight'. Веди себе добре та відповідай коротко."
 
-        payload = {
-            "system_instruction": {
-                "parts": [{"text": systemStyle}]
-            },
-            "contents": [{
-                "role": "user",
-                "parts": [{"text": prompt}]
-            }]
-        }
+            payload = {
+                "system_instruction": {
+                    "parts": [{"text": systemStyle}]
+                },
+                "contents": [{
+                    "role": "user",
+                    "parts": [{"text": prompt}]
+                }]
+            }
 
-        headers = {
-            "Content-Type": "application/json"
-        }
+            headers = {
+                "Content-Type": "application/json"
+            }
 
-        import aiohttp
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, headers=headers) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    try:
-                        answer = data["candidates"][0]["content"]["parts"][0]["text"]
-                    except (KeyError, IndexError):
-                        answer = "❌ Помилка обробки відповіді від ШІ."
-                else:
-                    # Якщо знову буде помилка - виведемо її лог, як в Railway
-                    try:
-                        err_data = await response.json()
-                        err_msg = err_data.get("error", {}).get("message", "Невідома помилка")
-                    except:
-                        err_msg = await response.text()
-                    answer = f"❌ Помилка API Gemini: {response.status}\nДеталі: `{err_msg}`"
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload, headers=headers) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        try:
+                            answer = data["candidates"][0]["content"]["parts"][0]["text"]
+                        except (KeyError, IndexError):
+                            answer = "❌ Помилка обробки: ШІ повернув порожню або нестандартну відповідь."
+                    else:
+                        try:
+                            err_data = await response.json()
+                            err_msg = err_data.get("error", {}).get("message", "Невідома помилка")
+                        except:
+                            err_msg = await response.text()
+                        answer = f"❌ Помилка API Gemini: {response.status}\nДеталі: `{err_msg}`"
 
-        if len(answer) > 1900:
-            answer = answer[:1900] + "..."
+            if len(answer) > 1900:
+                answer = answer[:1900] + "..."
 
-        await interaction.followup.send(f"**Запит:** {prompt}\n**MidNight AI:** {answer}")
+            await interaction.followup.send(f"**Запит:** {prompt}\n**MidNight AI:** {answer}")
+
+        except Exception as e:
+            # Якщо станеться БУДЬ-ЯКА помилка в Python (немає aiohttp, відвалився інет тощо) — бот напише про це
+            print(f"Критична помилка в AI: {e}")
+            await interaction.followup.send(f"❌ Сталася внутрішня помилка коду:\n`{e}`")
 
 async def setup(bot):
     await bot.add_cog(CommandsCog(bot))
