@@ -359,18 +359,17 @@ class CommandsCog(commands.Cog):
     @app_commands.command(name="ai", description="Запитати ШІ (Gemini)")
     @app_commands.describe(prompt="Що хочеш запитати?")
     async def ask_gemini_cmd(self, interaction: discord.Interaction, prompt: str):
-        # Відкладаємо відповідь, бо запит до API займає час
+        # Відкладаємо відповідь
         await interaction.response.defer(ephemeral=False)
 
         tokenGem = os.environ.get("GEMINI_API_KEY")
         if not tokenGem:
             return await interaction.followup.send("❌ Токен Gemini не знайдено у .env файлі.")
 
-        # Очищаємо токен від можливих пробілів (найчастіша причина 404 помилки)
         clean_token = tokenGem.strip()
 
-        # Використовуємо -latest для певності
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-latest:generateContent?key={clean_token}"
+        # Посилання яке містить модель бота (МБ колись треба буде поміняти)
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={clean_token}"
 
         # Промт що відповідає за поведінку бота
         systemStyle = "Ти на діскорд сервері з ГТА5 під назвою 'MidNight'. Веди себе добре та відповідай коротко."
@@ -380,13 +379,18 @@ class CommandsCog(commands.Cog):
                 "parts": [{"text": systemStyle}]
             },
             "contents": [{
+                "role": "user",
                 "parts": [{"text": prompt}]
             }]
         }
 
+        headers = {
+            "Content-Type": "application/json"
+        }
+
         import aiohttp
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload) as response:
+            async with session.post(url, json=payload, headers=headers) as response:
                 if response.status == 200:
                     data = await response.json()
                     try:
@@ -394,7 +398,7 @@ class CommandsCog(commands.Cog):
                     except (KeyError, IndexError):
                         answer = "❌ Помилка обробки відповіді від ШІ."
                 else:
-                    # Витягуємо текст помилки, щоб точно знати, на що жаліється Google
+                    # Якщо знову буде помилка - виведемо її лог, як в Railway
                     try:
                         err_data = await response.json()
                         err_msg = err_data.get("error", {}).get("message", "Невідома помилка")
