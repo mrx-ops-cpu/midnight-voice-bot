@@ -143,5 +143,5 @@ class EventsCog(commands.Cog):
             await utils.update_fame_message(guild, self.bot)
             await utils.update_live_message(guild, self.bot)
 
-async def setup(bot):
-    await bot.add_cog(EventsCog(bot))
+def setup(bot):
+    bot.add_cog(EventsCog(bot))

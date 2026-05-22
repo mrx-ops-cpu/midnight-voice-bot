@@ -160,5 +160,5 @@ class TasksCog(commands.Cog):
     async def before_daily_report(self):
         await self.bot.wait_until_ready()
 
-async def setup(bot):
-    await bot.add_cog(TasksCog(bot))
+def setup(bot):
+    bot.add_cog(TasksCog(bot))

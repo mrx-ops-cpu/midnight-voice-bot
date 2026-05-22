@@ -177,12 +177,12 @@ async def on_ready():
     
     print(f"READY: {len(config.voice_start_times)} у войсі | {len(config.active_rooms)} активних кімнат")
 
-async def main():
+if __name__ == "__main__":
     keep_alive()
     
     for extension in INITIAL_EXTENSIONS:
         try:
-            await bot.load_extension(extension)
+            bot.load_extension(extension)
             print(f"✅ Модуль завантажено: {extension}")
         except Exception as e:
             print(f"❌ Помилка завантаження {extension}: {e}")
@@ -190,9 +190,5 @@ async def main():
     token = os.environ.get("DISCORD_TOKEN")
     if not token:
         print("❌ УВАГА: DISCORD_TOKEN не знайдено!")
-        return
-    
-    await bot.start(token)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    else:
+        bot.run(token)
