@@ -1,9 +1,6 @@
 discord.py[voice]
-discord-ext-voice-recv
 flask
 gTTS
 PyNaCl
 python-dotenv
 aiohttp
-SpeechRecognition
-pydub

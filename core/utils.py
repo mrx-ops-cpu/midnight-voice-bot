@@ -89,33 +89,58 @@ async def play_tts(text, guild, bot):
     try:
         ffmpeg = FFMPEG_PATH or shutil.which("ffmpeg")
         if not ffmpeg:
+            print("ERROR play_tts: ffmpeg не знайдено")
             return
-            
+
         tts = gTTS(text=text, lang="uk")
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
             tmp_name = tmp.name
-            
+
         await bot.loop.run_in_executor(None, tts.save, tmp_name)
-        
+        print(f"🔊 TTS: файл збережено {tmp_name}")
+
         vc = discord.utils.get(bot.voice_clients, guild=guild)
         if not vc:
             await join_voice_safe(bot)
             await asyncio.sleep(2)
             vc = discord.utils.get(bot.voice_clients, guild=guild)
-            
+
         if not vc:
+            print("ERROR play_tts: голосовий канал не знайдено")
             return
-            
-        while vc.is_playing(): 
+
+        # Чекаємо поки закінчить грати (з тайм-аутом 30с)
+        waited = 0
+        while vc.is_playing() and waited < 30:
             await asyncio.sleep(0.5)
-            
-        vc.play(discord.FFmpegPCMAudio(tmp_name, executable=ffmpeg))
+            waited += 0.5
+
+        print(f"🔊 TTS: починаю відтворення...")
         
-        while vc.is_playing(): 
-            await asyncio.sleep(0.5)
-            
+        finished = asyncio.Event()
+        
+        def after_play(error):
+            if error:
+                print(f"ERROR play_tts after: {error}")
+            finished.set()
+        
+        vc.play(
+            discord.FFmpegPCMAudio(tmp_name, executable=ffmpeg),
+            after=after_play
+        )
+
+        # Чекаємо завершення з тайм-аутом 60с
+        try:
+            await asyncio.wait_for(finished.wait(), timeout=60)
+        except asyncio.TimeoutError:
+            print("⚠️ TTS: тайм-аут відтворення")
+
+        print(f"✅ TTS: відтворення завершено")
+
     except Exception as e:
         print(f"ERROR play_tts: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
         if tmp_name and os.path.exists(tmp_name):
             try:
