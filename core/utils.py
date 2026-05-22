@@ -77,7 +77,9 @@ async def join_voice_safe(bot):
     if not ch: return
     vc = discord.utils.get(bot.voice_clients, guild=ch.guild)
     if not vc:
-        try: await ch.connect(timeout=20.0, reconnect=True)
+        try:
+            from discord.ext import voice_recv
+            await ch.connect(cls=voice_recv.VoiceRecvClient, timeout=20.0, reconnect=True)
         except Exception as e: print(f"ERROR join_voice: {e}")
     elif vc.channel.id != config.VOICE_ID:
         await vc.move_to(ch)
