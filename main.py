@@ -106,7 +106,9 @@ async def on_ready():
     
     database.load_message_ids()
     
-    # Pycord syncs commands automatically
+    if getattr(bot, "synced", False) is False:
+        await bot.tree.sync()
+        bot.synced = True
     
     saved_gs = database.load_game_sessions()
     saved_vs = database.load_voice_sessions()
@@ -177,18 +179,23 @@ async def on_ready():
     
     print(f"READY: {len(config.voice_start_times)} у войсі | {len(config.active_rooms)} активних кімнат")
 
-if __name__ == "__main__":
+async def main():
     keep_alive()
     
-    for extension in INITIAL_EXTENSIONS:
-        try:
-            bot.load_extension(extension)
-            print(f"✅ Модуль завантажено: {extension}")
-        except Exception as e:
-            print(f"❌ Помилка завантаження {extension}: {e}")
+    async with bot:
+        for extension in INITIAL_EXTENSIONS:
+            try:
+                await bot.load_extension(extension)
+                print(f"✅ Модуль завантажено: {extension}")
+            except Exception as e:
+                print(f"❌ Помилка завантаження {extension}: {e}")
 
-    token = os.environ.get("DISCORD_TOKEN")
-    if not token:
-        print("❌ УВАГА: DISCORD_TOKEN не знайдено!")
-    else:
-        bot.run(token)
+        token = os.environ.get("DISCORD_TOKEN")
+        if not token:
+            print("❌ УВАГА: DISCORD_TOKEN не знайдено!")
+            return
+        
+        await bot.start(token)
+
+if __name__ == "__main__":
+    asyncio.run(main())
