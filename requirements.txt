@@ -4,3 +4,5 @@ gTTS
 PyNaCl
 python-dotenv
 aiohttp
+SpeechRecognition
+pydub

@@ -303,10 +303,10 @@ class CommandsCog(commands.Cog):
         embed = discord.Embed(title="🌑 Midnight Bot | Допомога", color=0x2b2d31)
         embed.add_field(name="📊 Статистика", value="`/stats profile` `/stats top` `/stats full`", inline=False)
         embed.add_field(name="🎮 Геймінг", value="`/stats games` `/stats kings`", inline=False)
-        embed.add_field(name="🎙️ Войс та Інше", value="`/say` `/ping` `/info`", inline=False)
+        embed.add_field(name="🎙️ Войс та Інше", value="`/say` `/ping` `/info` `/ai`", inline=False)
         embed.add_field(
             name="⚙️ Система (Admin)",
-            value="`/set monitoring` `/set voice` `/set stats` `/set say_limit`",
+            value="`/set monitoring` `/set voice` `/set stats` `/set say_limit` `/set voice_ai` `/set keyword` `/set record_duration`",
             inline=False
         )
         embed.set_footer(text=utils.midnight_footer())
@@ -355,6 +355,44 @@ class CommandsCog(commands.Cog):
             
         config.GLOBAL_SETTINGS["voice_stats"] = (state.value == "on")
         await interaction.response.send_message(f"📊 Статистика: **{'Увімкнено' if config.GLOBAL_SETTINGS['voice_stats'] else 'Вимкнено'}**", ephemeral=True)
+
+    @set_group.command(name="voice_ai", description="Увімкнути/Вимкнути голосовий ШІ")
+    @app_commands.describe(state="Оберіть стан")
+    @app_commands.rename(state="стан")
+    @app_commands.choices(state=[
+        app_commands.Choice(name="Увімкнути", value="on"),
+        app_commands.Choice(name="Вимкнути", value="off")
+    ])
+    async def set_voice_ai_cmd(self, interaction: discord.Interaction, state: app_commands.Choice[str]):
+        if not interaction.user.guild_permissions.administrator:
+            return await interaction.response.send_message("❌ Тільки адміни", ephemeral=True)
+            
+        config.GLOBAL_SETTINGS["voice_ai_enabled"] = (state.value == "on")
+        await interaction.response.send_message(f"🤖 Голосовий ШІ: **{'Увімкнено' if config.GLOBAL_SETTINGS['voice_ai_enabled'] else 'Вимкнено'}**", ephemeral=True)
+
+    @set_group.command(name="keyword", description="Змінити ключове слово для голосового ШІ")
+    @app_commands.describe(keyword="Нове ключове слово")
+    @app_commands.rename(keyword="слово")
+    async def set_keyword_cmd(self, interaction: discord.Interaction, keyword: str):
+        if not interaction.user.guild_permissions.administrator:
+            return await interaction.response.send_message("❌ Тільки адміни", ephemeral=True)
+        if len(keyword) < 2 or len(keyword) > 20:
+            return await interaction.response.send_message("❌ Слово має бути від 2 до 20 символів", ephemeral=True)
+            
+        config.VOICE_AI_KEYWORD = keyword
+        await interaction.response.send_message(f"🔑 Ключове слово: **{keyword}**", ephemeral=True)
+
+    @set_group.command(name="record_duration", description="Тривалість запису для голосового ШІ")
+    @app_commands.describe(seconds="Тривалість в секундах (5-60)")
+    @app_commands.rename(seconds="секунди")
+    async def set_record_duration_cmd(self, interaction: discord.Interaction, seconds: int):
+        if not interaction.user.guild_permissions.administrator:
+            return await interaction.response.send_message("❌ Тільки адміни", ephemeral=True)
+        if seconds < 5 or seconds > 60:
+            return await interaction.response.send_message("❌ Тривалість має бути від 5 до 60 секунд", ephemeral=True)
+            
+        config.VOICE_AI_RECORD_DURATION = seconds
+        await interaction.response.send_message(f"⏱️ Тривалість запису: **{seconds} секунд**", ephemeral=True)
 
     @app_commands.command(name="ai", description="Запитати ШІ (Gemini)")
     @app_commands.describe(prompt="Що хочеш запитати?")

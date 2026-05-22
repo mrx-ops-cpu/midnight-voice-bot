@@ -96,6 +96,7 @@ INITIAL_EXTENSIONS = [
     'cogs.events',
     'cogs.commands',
     'cogs.tasks',
+    'cogs.voice_ai_cog',
 ]
 
 @bot.event
