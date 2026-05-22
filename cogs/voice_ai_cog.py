@@ -35,12 +35,8 @@ class VoiceAICog(commands.Cog):
             return
             
         try:
-            from discord.ext import voice_recv
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
-                self.tmp_path = tmp_file.name
-                
-            self.sink = voice_recv.WaveSink(self.tmp_path)
-            vc.listen(self.sink)
+            self.sink = discord.sinks.WaveSink()
+            vc.start_recording(self.sink, self.finish_recording, vc)
             self.is_recording = True
             print(f"🎙️ Voice AI: Запис розпочато в каналі {vc.channel.name}")
             
@@ -55,33 +51,44 @@ class VoiceAICog(commands.Cog):
         """Автоматично зупиняє запис через налаштований час"""
         duration = config.VOICE_AI_RECORD_DURATION
         await asyncio.sleep(duration)
-        if self.is_recording:
+        if self.is_recording and vc.is_recording():
             try:
-                vc.stop_listening()
+                vc.stop_recording()
                 print(f"🎙️ Voice AI: Автозупинення запису (тайм-аут {duration}с)")
             except:
                 pass
-            await self.finish_recording(vc)
             
-    async def finish_recording(self, vc):
+    async def finish_recording(self, sink, vc):
         """Обробляє завершений запис"""
         self.is_recording = False
-        print(f"🎙️ Voice AI: Запис завершено")
+        print(f"🎙️ Voice AI: Запис завершено, отримано {len(sink.audio_data)} аудіо-файлів")
         
         try:
-            if hasattr(self.sink, 'cleanup'):
-                self.sink.cleanup()
+            for user_id, audio in sink.audio_data.items():
+                if user_id == self.bot.user.id:
+                    print(f"⏭️ Voice AI: Пропускаю аудіо бота")
+                    continue
+                    
+                print(f"🎤 Voice AI: Обробка аудіо користувача {user_id}")
                 
-            print(f"🎤 Voice AI: Обробка аудіо")
-            
-            # Обробляємо аудіо
-            await self.process_audio(self.bot.user.id, self.tmp_path, vc.guild)
-            
-            # Видаляємо тимчасовий файл
-            if hasattr(self, 'tmp_path') and os.path.exists(self.tmp_path):
-                os.remove(self.tmp_path)
-                print(f"🗑️ Voice AI: Тимчасовий файл видалено")
+                # Зберігаємо аудіо у файл
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
+                    tmp_path = tmp_file.name
+                    
+                audio.file.seek(0)
+                with open(tmp_path, "wb") as f:
+                    f.write(audio.file.read())
+                    
+                print(f"📁 Voice AI: Аудіо збережено в {tmp_path}")
                 
+                # Обробляємо аудіо
+                await self.process_audio(user_id, tmp_path, vc.guild)
+                
+                # Видаляємо тимчасовий файл
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+                    print(f"🗑️ Voice AI: Тимчасовий файл видалено")
+                    
         except Exception as e:
             print(f"❌ Voice AI: Помилка обробки запису: {e}")
             import traceback
@@ -232,10 +239,7 @@ class VoiceAICog(commands.Cog):
                 print("🛑 Voice AI: Голосовий ШІ вимкнено, зупинення запису")
                 vc = discord.utils.get(self.bot.voice_clients, guild=self.bot.guilds[0])
                 if vc:
-                    try:
-                        vc.stop_listening()
-                    except:
-                        pass
+                    vc.stop_recording()
                 self.is_recording = False
             return
             

@@ -106,9 +106,7 @@ async def on_ready():
     
     database.load_message_ids()
     
-    if getattr(bot, "synced", False) is False:
-        await bot.tree.sync()
-        bot.synced = True
+    # Pycord syncs commands automatically
     
     saved_gs = database.load_game_sessions()
     saved_vs = database.load_voice_sessions()

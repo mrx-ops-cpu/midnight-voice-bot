@@ -1,5 +1,4 @@
-discord.py[voice]
-discord-ext-voice-recv
+py-cord[voice]
 flask
 gTTS
 PyNaCl
