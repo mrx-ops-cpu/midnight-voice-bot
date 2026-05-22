@@ -401,7 +401,4 @@ class CommandsCog(commands.Cog):
             await interaction.followup.send(f"❌ Внутрішня помилка:\n`{e}`")
 
 async def setup(bot):
-    cog = CommandsCog(bot)
-    await bot.add_cog(cog)
-    bot.tree.add_command(cog.stats_group)
-    bot.tree.add_command(cog.set_group)
+    await bot.add_cog(CommandsCog(bot))
