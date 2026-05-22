@@ -41,4 +41,4 @@ SAY_LIMIT         = 3
 say_usage         = {}
 
 VOICE_AI_KEYWORD   = "асистент"  # Ключове слово для активації голосового ШІ
-VOICE_AI_RECORD_DURATION = 30  # Тривалість запису в секундах
+VOICE_AI_RECORD_DURATION = 10  # Тривалість запису в секундах

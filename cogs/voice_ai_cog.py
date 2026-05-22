@@ -105,8 +105,6 @@ class VoiceAICog(commands.Cog):
             recognizer.pause_threshold = 0.8
             
             with sr.AudioFile(audio_path) as source:
-                # Спочатку налаштовуємо шумове оточення
-                recognizer.adjust_for_ambient_noise(source, duration=0.5)
                 audio = recognizer.record(source)
                 
             try:
