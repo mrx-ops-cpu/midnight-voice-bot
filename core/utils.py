@@ -7,7 +7,7 @@ import tempfile
 import hashlib
 import json
 from datetime import datetime, timezone
-from gtts import gTTS
+import edge_tts
 
 from core import config, database
 
@@ -90,11 +90,11 @@ async def play_tts(text, guild, bot):
             print("ERROR play_tts: ffmpeg не знайдено")
             return
 
-        tts = gTTS(text=text, lang="uk")
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
             tmp_name = tmp.name
 
-        await bot.loop.run_in_executor(None, tts.save, tmp_name)
+        communicate = edge_tts.Communicate(text, "uk-UA-PolinaNeural")
+        await communicate.save(tmp_name)
         print(f"🔊 TTS: файл збережено {tmp_name}")
 
         vc = discord.utils.get(bot.voice_clients, guild=guild)

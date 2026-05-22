@@ -4,3 +4,4 @@ gTTS
 PyNaCl
 python-dotenv
 aiohttp
+edge-tts
