@@ -99,7 +99,7 @@ async def play_tts(text, guild, bot):
         if elevenlabs_key:
             try:
                 import aiohttp
-                voice_id = "yMBZR4SLoc24wOJLWAB2" # Голос Solomiya
+                voice_id = "21m00Tcm4TlvDq8ikWAM" # Голос Rachel (доступний на безкоштовному тарифі)
                 url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
                 headers = {
                     "Accept": "audio/mpeg",
@@ -121,7 +121,8 @@ async def play_tts(text, guild, bot):
                                 f.write(await resp.read())
                             print(f"🔊 TTS: файл збережено через ElevenLabs")
                         else:
-                            raise Exception(f"ElevenLabs API Error: {resp.status}")
+                            err_text = await resp.text()
+                            raise Exception(f"ElevenLabs API Error {resp.status}: {err_text}")
             except Exception as e:
                 print(f"⚠️ Помилка ElevenLabs ({e}), перехід на Google Translate (gTTS)...")
                 from gtts import gTTS
