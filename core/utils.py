@@ -93,9 +93,46 @@ async def play_tts(text, guild, bot):
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
             tmp_name = tmp.name
 
-        communicate = edge_tts.Communicate(text, "uk-UA-PolinaNeural")
-        await communicate.save(tmp_name)
-        print(f"🔊 TTS: файл збережено {tmp_name}")
+        import os
+        elevenlabs_key = os.environ.get("ELEVENLABS_API_KEY")
+
+        if elevenlabs_key:
+            try:
+                import aiohttp
+                voice_id = "yMBZR4SLoc24wOJLWAB2" # Голос Solomiya
+                url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+                headers = {
+                    "Accept": "audio/mpeg",
+                    "Content-Type": "application/json",
+                    "xi-api-key": elevenlabs_key.strip()
+                }
+                data = {
+                    "text": text,
+                    "model_id": "eleven_multilingual_v2",
+                    "voice_settings": {
+                        "stability": 0.5,
+                        "similarity_boost": 0.75
+                    }
+                }
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(url, json=data, headers=headers) as resp:
+                        if resp.status == 200:
+                            with open(tmp_name, 'wb') as f:
+                                f.write(await resp.read())
+                            print(f"🔊 TTS: файл збережено через ElevenLabs")
+                        else:
+                            raise Exception(f"ElevenLabs API Error: {resp.status}")
+            except Exception as e:
+                print(f"⚠️ Помилка ElevenLabs ({e}), перехід на Google Translate (gTTS)...")
+                from gtts import gTTS
+                tts = gTTS(text=text, lang='uk', slow=False)
+                tts.save(tmp_name)
+                print(f"🔊 TTS: файл збережено через Google Translate (Fallback)")
+        else:
+            from gtts import gTTS
+            tts = gTTS(text=text, lang='uk', slow=False)
+            tts.save(tmp_name)
+            print(f"🔊 TTS: файл збережено {tmp_name} (Google Translate)")
 
         vc = discord.utils.get(bot.voice_clients, guild=guild)
         if not vc:
