@@ -275,3 +275,19 @@ def save_faceit_users(data):
             json.dump(data, f, indent=2, ensure_ascii=False)
         os.replace(tmp_file, config.FACEIT_FILE)
     except: pass
+
+def load_mafia_stats():
+    if os.path.exists(config.MAFIA_FILE):
+        try:
+            with open(config.MAFIA_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except: pass
+    return {}
+
+def save_mafia_stats(data):
+    try:
+        tmp_file = config.MAFIA_FILE + ".tmp"
+        with open(tmp_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_file, config.MAFIA_FILE)
+    except Exception as e: print(f"ERROR save_mafia_stats: {e}")
