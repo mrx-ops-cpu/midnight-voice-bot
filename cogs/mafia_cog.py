@@ -23,6 +23,27 @@ class JoinView(discord.ui.View):
         else:
             await interaction.response.send_message("Ви вже у грі!", ephemeral=True)
 
+    @discord.ui.button(label="Вийти", style=discord.ButtonStyle.gray, custom_id="leave_mafia")
+    async def leave_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.game.remove_player(interaction.user.id):
+            embed = interaction.message.embeds[0]
+            players_text = "\n".join([f"- {p.display_name}" for p in self.game.get_alive_players()])
+            if not players_text: players_text = "Немає гравців"
+            embed.description = f"**Гравці ({len(self.game.players)}/10):**\n{players_text}"
+            await interaction.response.edit_message(embed=embed, view=self)
+        else:
+            await interaction.response.send_message("Ви не приєднані до гри!", ephemeral=True)
+
+    @discord.ui.button(label="Скасувати", style=discord.ButtonStyle.danger, custom_id="cancel_mafia")
+    async def cancel_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.game.creator_id and not interaction.user.guild_permissions.administrator:
+            return await interaction.response.send_message("Тільки творець або адмін може скасувати гру!", ephemeral=True)
+            
+        if interaction.guild.id in active_games:
+            del active_games[interaction.guild.id]
+        embed = discord.Embed(title="🛑 Гру скасовано", description="Збір гравців скасовано.", color=0xed4245)
+        await interaction.response.edit_message(embed=embed, view=None)
+
     @discord.ui.button(label="Почати", style=discord.ButtonStyle.red, custom_id="start_mafia")
     async def start_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.game.creator_id:
@@ -41,10 +62,15 @@ class JoinView(discord.ui.View):
                     try: await member.edit(mute=True)
                     except: pass
 
-        # Send DMs
+        # Send DMs and change Nicknames
         for p_id, p_info in self.game.players.items():
             user = p_info["user"]
             role = p_info["role"]
+            member = interaction.guild.get_member(p_id)
+            if member:
+                p_info["original_name"] = member.display_name
+                try: await member.edit(nick=f"🕵️ {member.display_name}")
+                except: pass
             try:
                 await user.send(f"🕵️ Ваша роль у цій грі: **{role}**. Нікому не кажіть!")
             except: pass
@@ -91,6 +117,18 @@ class VoteView(discord.ui.View):
             embed.title = "🏆 Гра закінчена!"
             embed.description += f"\n\n**Перемогли: {win}**"
             await interaction.response.edit_message(embed=embed, view=None)
+            
+            # Restore names and unmute
+            for p_id, p_info in self.game.players.items():
+                member = interaction.guild.get_member(p_id)
+                if member:
+                    orig_name = p_info.get("original_name")
+                    in_vc = member.voice and member.voice.channel
+                    try: 
+                        if in_vc: await member.edit(mute=False, nick=orig_name)
+                        else: await member.edit(nick=orig_name)
+                    except: pass
+                    
             del active_games[interaction.guild.id]
         else:
             await interaction.response.edit_message(embed=embed, view=None)
@@ -156,6 +194,29 @@ class MafiaCog(commands.Cog):
             embed.add_field(name=f"{i}. {name}", value=f"Перемог: **{wins}** (Ігор: {games})", inline=False)
             
         await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="mafia_stop", description="Екстрено завершити поточну гру Мафії")
+    async def mafia_stop(self, interaction: discord.Interaction):
+        if interaction.guild.id not in active_games:
+            return await interaction.response.send_message("Зараз немає активної гри на сервері.", ephemeral=True)
+            
+        game = active_games[interaction.guild.id]
+        if interaction.user.id != game.creator_id and not interaction.user.guild_permissions.administrator:
+            return await interaction.response.send_message("Тільки творець гри або адмін може її зупинити!", ephemeral=True)
+            
+        # Розмучуємо всіх і повертаємо нікнейми
+        for p_id, p_info in game.players.items():
+            member = interaction.guild.get_member(p_id)
+            if member:
+                orig = p_info.get("original_name")
+                in_vc = member.voice and member.voice.channel
+                try: 
+                    if in_vc: await member.edit(mute=False, nick=orig)
+                    else: await member.edit(nick=orig)
+                except: pass
+                    
+        del active_games[interaction.guild.id]
+        await interaction.response.send_message("🛑 **Гру екстрено завершено.** Усім гравцям повернено мікрофони та нікнейми.")
 
 async def setup(bot):
     await bot.add_cog(MafiaCog(bot))
