@@ -11,7 +11,7 @@ class MafiaGame:
         self.guild_id = guild_id
         self.channel_id = channel_id
         self.creator_id = creator_id
-        self.players = {} # user_id -> {"user": discord.Member, "role": str, "alive": bool}
+        self.players = {} # user_id -> {"user": discord.Member, "role": str, "alive": bool, "original_name": str}
         self.state = "LOBBY" # LOBBY, NIGHT, DAY
         self.day_count = 0
         
@@ -21,6 +21,11 @@ class MafiaGame:
             "heal": None,
             "check": None
         }
+        
+        # Track how many night actions we're waiting for
+        self.night_actions_received = 0
+        self.night_actions_expected = 0
+        self.night_event = None  # asyncio.Event to signal night is done
         
         self.day_votes = {} # user_id -> voted_for_user_id
         
@@ -43,7 +48,8 @@ class MafiaGame:
         random.shuffle(player_ids)
         count = len(player_ids)
         
-        mafia_count = 1 if count <= 5 else 2
+        # 2 мафії тільки від 10 гравців
+        mafia_count = 2 if count >= 10 else 1
         doctor_count = 1
         sheriff_count = 1 if count >= 5 else 0
         
@@ -62,37 +68,56 @@ class MafiaGame:
     def get_alive_players(self):
         return [p["user"] for p in self.players.values() if p["alive"]]
 
+    def get_players_by_role(self, role):
+        return [p_id for p_id, p in self.players.items() if p["role"] == role and p["alive"]]
+
+    def count_expected_night_actions(self):
+        """Count how many night actions we expect (mafia + doctor + sheriff if alive)."""
+        count = 0
+        for p in self.players.values():
+            if not p["alive"]:
+                continue
+            if p["role"] in (Role.MAFIA, Role.DOCTOR, Role.SHERIFF):
+                count += 1
+        return count
+
     def check_win_condition(self):
         alive = [p for p in self.players.values() if p["alive"]]
         mafia_alive = [p for p in alive if p["role"] == Role.MAFIA]
         citizens_alive = [p for p in alive if p["role"] != Role.MAFIA]
         
         if len(mafia_alive) == 0:
-            return "CITIZENS"
+            return "МИРНІ ЖИТЕЛІ 🏘️"
         if len(mafia_alive) >= len(citizens_alive):
-            return "MAFIA"
+            return "МАФІЯ 🔫"
         return None
 
     def process_night(self):
+        self.day_count += 1
         killed_id = self.night_actions.get("kill")
         healed_id = self.night_actions.get("heal")
         
         events = []
         dead_person = None
         
-        if killed_id:
-            if killed_id != healed_id:
-                self.players[killed_id]["alive"] = False
-                user = self.players[killed_id]["user"]
-                role = self.players[killed_id]["role"]
-                dead_person = killed_id
-                events.append(f"💀 Вночі мафія безжалісно вбила **{user.display_name}**. Його роль була: **{role}**.")
-            else:
-                events.append("💉 Вночі мафія стріляла, але Лікар майстерно врятував жертву! Ніхто не помер.")
+        if self.day_count == 1:
+            # Перша ніч — ніч знайомств, ніхто не гине
+            events.append("🌙 Перша ніч — ніч знайомств. Мафія лише придивляється до своїх жертв, ніхто не гине.")
         else:
-            events.append("Тиха ніч. Мафія вирішила нікого не вбивати (або проспала).")
+            if killed_id:
+                if killed_id != healed_id:
+                    self.players[killed_id]["alive"] = False
+                    user = self.players[killed_id]["user"]
+                    role = self.players[killed_id]["role"]
+                    dead_person = killed_id
+                    events.append(f"💀 Вночі мафія безжалісно вбила **{user.display_name}**. Його роль була: **{role}**.")
+                else:
+                    events.append("💉 Вночі мафія стріляла, але Лікар майстерно врятував жертву! Ніхто не помер.")
+            else:
+                events.append("😴 Тиха ніч. Мафія вирішила нікого не вбивати (або проспала).")
             
         self.night_actions = {"kill": None, "heal": None, "check": None}
+        self.night_actions_received = 0
         return events, dead_person
 
     def process_day_votes(self):
@@ -107,6 +132,7 @@ class MafiaGame:
         candidates = [t for t, c in vote_counts.items() if c == max_votes]
         
         if len(candidates) > 1:
+            self.day_votes = {}
             return None, "⚖️ Голоси розділилися порівну! Суд зайшов у глухий кут, нікого не стратили."
             
         executed_id = candidates[0]
