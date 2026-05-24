@@ -126,15 +126,19 @@ class VoteView(discord.ui.View):
         if interaction.user.id not in self.game.players or not self.game.players[interaction.user.id]["alive"]:
             return await interaction.response.send_message("Ви не живий гравець!", ephemeral=True)
             
+        alive_players = self.game.get_alive_players()
+        if len(self.game.day_votes) < len(alive_players):
+            return await interaction.response.send_message(f"Ще не всі проголосували! ({len(self.game.day_votes)}/{len(alive_players)})", ephemeral=True)
+            
+        await interaction.response.defer()
+        
         executed, event = self.game.process_day_votes()
         embed = interaction.message.embeds[0]
-        embed.title = "🌙 Наступна ніч"
-        embed.description = event + "\n\nМісто знову засинає..."
         
         win = self.game.check_win_condition()
         if win:
             embed.title = "🏆 Гра закінчена!"
-            embed.description += f"\n\n**Перемогли: {win}**"
+            embed.description = event + f"\n\n**Перемогли: {win}**"
             await interaction.message.edit(embed=embed, view=None)
             
             # Restore names and unmute
@@ -149,8 +153,60 @@ class VoteView(discord.ui.View):
                     except: pass
                     
             del active_games[interaction.guild.id]
-        else:
-            await interaction.message.edit(embed=embed, view=VoteView(self.game))
+            return
+            
+        # Якщо гра не закінчилася — починається НІЧ
+        embed.title = f"🌙 Ніч {self.game.day_count + 1}"
+        embed.description = event + "\n\nМісто знову засинає. Мафія виходить на полювання..."
+        await interaction.message.edit(embed=embed, view=None)
+        
+        # Mute everyone for the night
+        if interaction.user.voice and interaction.user.voice.channel:
+            vc = interaction.user.voice.channel
+            for p_id, p_info in self.game.players.items():
+                if p_info["alive"]:
+                    member = vc.guild.get_member(p_id)
+                    if member and member in vc.members:
+                        try: await member.edit(mute=True)
+                        except: pass
+                        
+        await asyncio.sleep(15)
+        
+        night_events, dead = self.game.process_night()
+        
+        win = self.game.check_win_condition()
+        if win:
+            embed.title = "🏆 Гра закінчена!"
+            embed.description = "\n".join(night_events) + f"\n\n**Перемогли: {win}**"
+            await interaction.message.edit(embed=embed, view=None)
+            
+            # Restore names and unmute
+            for p_id, p_info in self.game.players.items():
+                member = interaction.guild.get_member(p_id)
+                if member:
+                    orig_name = p_info.get("original_name")
+                    in_vc = member.voice and member.voice.channel
+                    try: 
+                        if in_vc: await member.edit(mute=False, nick=orig_name)
+                        else: await member.edit(nick=orig_name)
+                    except: pass
+                    
+            del active_games[interaction.guild.id]
+            return
+            
+        # Якщо після ночі гра продовжується — починається ДЕНЬ
+        if interaction.user.voice and interaction.user.voice.channel:
+            vc = interaction.user.voice.channel
+            for p_id, p_info in self.game.players.items():
+                if p_info["alive"]:
+                    member = vc.guild.get_member(p_id)
+                    if member and member in vc.members:
+                        try: await member.edit(mute=False)
+                        except: pass
+
+        embed.title = f"☀️ День {self.game.day_count}"
+        embed.description = "\n".join(night_events) + "\n\nЧас обговорити та проголосувати!"
+        await interaction.message.edit(embed=embed, view=VoteView(self.game))
 
 class MafiaCog(commands.Cog):
     def __init__(self, bot):
