@@ -51,6 +51,8 @@ class JoinView(discord.ui.View):
         if len(self.game.players) < 4:
             return await interaction.response.send_message("Мінімум 4 гравці!", ephemeral=True)
 
+        await interaction.response.defer()
+
         self.game.assign_roles()
         
         # Mute everyone if they are in VC
@@ -76,7 +78,7 @@ class JoinView(discord.ui.View):
             except: pass
 
         embed = discord.Embed(title="🌙 Ніч 1", description="Місто засинає. Мафія виходить на полювання...", color=0x2b2d31)
-        await interaction.response.edit_message(embed=embed, view=None)
+        await interaction.message.edit(embed=embed, view=None)
         
         # Wait for night actions (Simplified: just wait 15 seconds for now)
         await asyncio.sleep(15)
@@ -102,6 +104,23 @@ class VoteView(discord.ui.View):
         self.game = game
         self.voted = set()
 
+        options = []
+        for p in self.game.get_alive_players():
+            options.append(discord.SelectOption(label=p.display_name, value=str(p.id)))
+            
+        if options:
+            select = discord.ui.Select(placeholder="Оберіть, кого стратити", options=options, custom_id="mafia_vote_select")
+            select.callback = self.vote_callback
+            self.add_item(select)
+
+    async def vote_callback(self, interaction: discord.Interaction):
+        if interaction.user.id not in self.game.players or not self.game.players[interaction.user.id]["alive"]:
+            return await interaction.response.send_message("Тільки живі гравці можуть голосувати!", ephemeral=True)
+            
+        target_id = int(interaction.data["values"][0])
+        self.game.day_votes[interaction.user.id] = target_id
+        await interaction.response.send_message("Ваш голос зараховано!", ephemeral=True)
+
     @discord.ui.button(label="Завершити день", style=discord.ButtonStyle.blurple, custom_id="end_day")
     async def end_day_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id not in self.game.players or not self.game.players[interaction.user.id]["alive"]:
@@ -116,7 +135,7 @@ class VoteView(discord.ui.View):
         if win:
             embed.title = "🏆 Гра закінчена!"
             embed.description += f"\n\n**Перемогли: {win}**"
-            await interaction.response.edit_message(embed=embed, view=None)
+            await interaction.message.edit(embed=embed, view=None)
             
             # Restore names and unmute
             for p_id, p_info in self.game.players.items():
@@ -131,7 +150,7 @@ class VoteView(discord.ui.View):
                     
             del active_games[interaction.guild.id]
         else:
-            await interaction.response.edit_message(embed=embed, view=None)
+            await interaction.message.edit(embed=embed, view=VoteView(self.game))
 
 class MafiaCog(commands.Cog):
     def __init__(self, bot):
