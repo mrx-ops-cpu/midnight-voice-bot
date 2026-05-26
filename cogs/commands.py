@@ -348,5 +348,23 @@ class CommandsCog(commands.Cog):
         except Exception as e:
             await interaction.followup.send(f"❌ Внутрішня помилка:\n`{e}`")
 
+    @app_commands.command(name="setvoice", description="Обрати голосовий канал, де бот буде завжди сидіти")
+    @app_commands.describe(channel="Голосовий канал для бота")
+    async def setvoice(self, interaction: discord.Interaction, channel: discord.VoiceChannel):
+        if not interaction.user.guild_permissions.administrator:
+            return await interaction.response.send_message("❌ Тільки адмін може це зробити!", ephemeral=True)
+            
+        database.save_bot_voice(channel.id)
+        
+        # Одразу переміщуємо бота
+        vc = discord.utils.get(self.bot.voice_clients, guild=interaction.guild)
+        if vc:
+            await vc.move_to(channel)
+        else:
+            try: await channel.connect(timeout=20.0, reconnect=True)
+            except: pass
+            
+        await interaction.response.send_message(f"✅ Бот тепер завжди буде сидіти у **{channel.name}**!")
+
 async def setup(bot):
     await bot.add_cog(CommandsCog(bot))

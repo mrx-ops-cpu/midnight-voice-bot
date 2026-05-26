@@ -291,3 +291,20 @@ def save_mafia_stats(data):
             json.dump(data, f, indent=2, ensure_ascii=False)
         os.replace(tmp_file, config.MAFIA_FILE)
     except Exception as e: print(f"ERROR save_mafia_stats: {e}")
+
+def load_bot_voice():
+    if os.path.exists(config.BOT_VOICE_FILE):
+        try:
+            with open(config.BOT_VOICE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data.get("channel_id")
+        except: pass
+    return None
+
+def save_bot_voice(channel_id):
+    try:
+        tmp_file = config.BOT_VOICE_FILE + ".tmp"
+        with open(tmp_file, "w", encoding="utf-8") as f:
+            json.dump({"channel_id": channel_id}, f)
+        os.replace(tmp_file, config.BOT_VOICE_FILE)
+    except Exception as e: print(f"ERROR save_bot_voice: {e}")

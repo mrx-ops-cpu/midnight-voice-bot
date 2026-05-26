@@ -73,13 +73,20 @@ def record_say_usage(user_id):
 
 async def join_voice_safe(bot):
     if not config.GLOBAL_SETTINGS["voice_guard"]: return
-    ch = bot.get_channel(config.VOICE_ID)
+    # Спочатку перевіряємо збережений канал, потім фолбек на VOICE_ID
+    from core import database
+    saved_id = database.load_bot_voice()
+    channel_id = saved_id if saved_id else config.VOICE_ID
+    ch = bot.get_channel(channel_id)
+    if not ch: 
+        # Якщо збережений канал не знайдено — пробуємо дефолтний
+        ch = bot.get_channel(config.VOICE_ID)
     if not ch: return
     vc = discord.utils.get(bot.voice_clients, guild=ch.guild)
     if not vc:
         try: await ch.connect(timeout=20.0, reconnect=True)
         except Exception as e: print(f"ERROR join_voice: {e}")
-    elif vc.channel.id != config.VOICE_ID:
+    elif vc.channel.id != ch.id:
         await vc.move_to(ch)
 
 async def play_tts(text, guild, bot):

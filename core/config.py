@@ -24,6 +24,7 @@ ROOMS_FILE         = os.path.join(DATA_DIR, "active_rooms.json")
 MSG_FILE           = os.path.join(DATA_DIR, "message_ids.json")
 FACEIT_FILE        = os.path.join(DATA_DIR, "faceit_users.json")
 MAFIA_FILE         = os.path.join(DATA_DIR, "mafia_stats.json")
+BOT_VOICE_FILE     = os.path.join(DATA_DIR, "bot_voice.json")
 
 os.makedirs(DATA_DIR, exist_ok=True)
 
