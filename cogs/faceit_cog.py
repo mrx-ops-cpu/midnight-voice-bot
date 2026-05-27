@@ -5,7 +5,52 @@ import io
 
 from core import database, config
 from core.faceit_api import FaceitAPI
-from core.image_gen import generate_dashboard_banner, generate_profile_card
+from core.image_gen import generate_dashboard_banner, generate_profile_card, generate_compare_card
+
+class CompareSelect(discord.ui.Select):
+    def __init__(self, bot, author_id, author_nickname):
+        self.bot = bot
+        self.api = FaceitAPI()
+        self.author_id = author_id
+        self.author_nickname = author_nickname
+        
+        users = database.load_faceit_users()
+        options = []
+        for uid, nick in users.items():
+            if str(uid) != str(author_id):
+                options.append(discord.SelectOption(label=nick, description="Порівняти з " + nick, value=nick))
+                
+        if not options:
+            options.append(discord.SelectOption(label="Немає інших гравців", value="none"))
+            
+        super().__init__(placeholder="Оберіть гравця для порівняння...", options=options[:25])
+
+    async def callback(self, interaction: discord.Interaction):
+        if self.values[0] == "none":
+            return await interaction.response.send_message("❌ На сервері більше немає прив'язаних гравців.", ephemeral=True)
+            
+        await interaction.response.defer(ephemeral=True)
+        target_nick = self.values[0]
+        
+        # Завантажуємо дані автора
+        p1_data = await self.api.get_player_by_nickname(self.author_nickname)
+        p1_stats = await self.api.get_player_stats(p1_data.get("player_id")) if p1_data and 'error' not in p1_data else {}
+        
+        # Завантажуємо дані цілі
+        p2_data = await self.api.get_player_by_nickname(target_nick)
+        p2_stats = await self.api.get_player_stats(p2_data.get("player_id")) if p2_data and 'error' not in p2_data else {}
+        
+        img_bytes = await generate_compare_card(self.author_nickname, p1_data, p1_stats, target_nick, p2_data, p2_stats)
+        file = discord.File(fp=img_bytes, filename="compare.png")
+        
+        await interaction.followup.send(file=file, ephemeral=True)
+
+
+class CompareView(discord.ui.View):
+    def __init__(self, bot, author_id, author_nickname):
+        super().__init__(timeout=60)
+        self.add_item(CompareSelect(bot, author_id, author_nickname))
+
 
 class FaceitButtons(discord.ui.View):
     def __init__(self, bot, cog):
@@ -30,7 +75,6 @@ class FaceitButtons(discord.ui.View):
         player_id = player_data.get("player_id")
         stats_data = await self.api.get_player_stats(player_id)
         
-        # Отримуємо детальну статистику останнього матчу
         match_stats_str = "Немає інформації про останній матч."
         history = await self.api.get_player_history(player_id, limit=1)
         if history and "items" in history and history["items"]:
@@ -51,7 +95,7 @@ class FaceitButtons(discord.ui.View):
                             deaths = p_stats.get("Deaths", "0")
                             kd = p_stats.get("K/D Ratio", "0")
                             hs = p_stats.get("Headshots %", "0")
-                            res = "✅ Перемога" if p_stats.get("Result") == "1" else "❌ Поразка"
+                            res = "Перемога" if p_stats.get("Result") == "1" else "Поразка"
                             match_stats_str = f"{res} на {map_name} [{score}]\nKills: {kills} | Deaths: {deaths} | K/D: {kd} | HS: {hs}%"
                             break
 
@@ -60,11 +104,21 @@ class FaceitButtons(discord.ui.View):
         
         await interaction.followup.send(file=file, ephemeral=True)
 
+    @discord.ui.button(label="Порівняти", style=discord.ButtonStyle.secondary, custom_id="faceit_btn_compare")
+    async def btn_compare(self, interaction: discord.Interaction, button: discord.ui.Button):
+        users = database.load_faceit_users()
+        nickname = users.get(str(interaction.user.id))
+        if not nickname:
+            return await interaction.response.send_message("❌ Ви ще не прив'язали акаунт! Використайте `/faceit_link`.", ephemeral=True)
+            
+        view = CompareView(self.bot, interaction.user.id, nickname)
+        await interaction.response.send_message("👥 Оберіть гравця для порівняння:", view=view, ephemeral=True)
+
     @discord.ui.button(label="Оновити Дашборд", style=discord.ButtonStyle.secondary, custom_id="faceit_btn_refresh")
     async def btn_refresh(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer(ephemeral=True)
+        # Відповідаємо відразу, але без надсилання тексту, щоб не спамити "Дашборд оновлено!"
+        await interaction.response.defer()
         await self.cog.update_dashboard()
-        await interaction.followup.send("✅ Дашборд оновлено!", ephemeral=True)
 
 
 class FaceitCog(commands.Cog):
@@ -138,15 +192,20 @@ class FaceitCog(commands.Cog):
         for uid, nickname in users.items():
             player_data = await self.api.get_player_by_nickname(nickname)
             if player_data and 'error' not in player_data:
+                player_id = player_data.get("player_id")
                 games = player_data.get("games", {})
                 cs2 = games.get("cs2", {})
                 elo = cs2.get("faceit_elo", 0)
                 level = cs2.get("skill_level", 1)
                 
+                # Завантажуємо стату для дашборду
+                stats_data = await self.api.get_player_stats(player_id)
+                
                 top_players.append({
                     "nickname": nickname,
                     "elo": elo,
-                    "level": level
+                    "level": level,
+                    "stats_data": stats_data
                 })
         
         # Sort top players
