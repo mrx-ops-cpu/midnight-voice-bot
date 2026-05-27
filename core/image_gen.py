@@ -56,7 +56,13 @@ def draw_faceit_level(draw, x, y, size, lvl, font):
     }
     color = level_colors.get(lvl, (255,255,255))
     
-    draw.ellipse([x, y, x+size, y+size], outline=color, width=2)
+    # Темний фон іконки
+    draw.ellipse([x, y, x+size, y+size], fill=(18, 20, 22, 255))
+    
+    # Малюємо дугу (arc) з розривом внизу. FaceIT стиль: від 140 до 40 градусів
+    arc_width = max(2, int(size * 0.15))
+    draw.arc([x + arc_width//2, y + arc_width//2, x + size - arc_width//2, y + size - arc_width//2], start=135, end=45, fill=color, width=arc_width)
+    
     lvl_str = str(lvl)
     text_bbox = draw.textbbox((0, 0), lvl_str, font=font)
     text_w = text_bbox[2] - text_bbox[0]
