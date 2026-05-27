@@ -5,3 +5,4 @@ PyNaCl
 python-dotenv
 aiohttp
 edge-tts
+Pillow

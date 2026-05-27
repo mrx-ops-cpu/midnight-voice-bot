@@ -97,6 +97,7 @@ INITIAL_EXTENSIONS = [
     'cogs.commands',
     'cogs.tasks',
     'cogs.mafia_cog',
+    'cogs.faceit_cog',
 ]
 
 @bot.event
