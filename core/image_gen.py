@@ -154,61 +154,79 @@ async def generate_dashboard_banner(top_players):
     output.seek(0)
     return output
 
+async def draw_compact_card(draw, img, x_off, y_off, nickname, player_data, stats_data):
+    font_elo = get_font(36, bold=True)
+    font_stat_val = get_font(18, bold=True)
+    font_stat_lbl = get_font(12, bold=False)
+    font_nick = get_font(18, bold=True)
+    font_recent = get_font(16, bold=True)
+    
+    draw_rounded_rect(draw, [x_off, y_off, x_off + 380, y_off + 180], 8, (33, 36, 40, 255))
+    
+    if not player_data or player_data.get('error'):
+        draw.text((x_off + 20, y_off + 70), "Гравець не знайдений", fill=(255, 50, 50), font=font_elo)
+        return
+
+    games = player_data.get("games", {})
+    cs2 = games.get("cs2", {})
+    elo = cs2.get("faceit_elo", 0)
+    lvl = cs2.get("skill_level", 1)
+    
+    draw_faceit_level(draw, x_off + 20, y_off + 15, 46, lvl, get_font(22, bold=True))
+    draw.text((x_off + 80, y_off + 20), str(elo), fill=(255, 255, 255), font=font_elo)
+    
+    lifetime = stats_data.get("lifetime", {}) if stats_data and 'error' not in stats_data else {}
+    wr = lifetime.get("Win Rate %", "-") + "%" if lifetime.get("Win Rate %", "-") != "-" else "-"
+    kd = lifetime.get("Average K/D Ratio", "-")
+    hs = lifetime.get("Average Headshots %", "-") + "%" if lifetime.get("Average Headshots %", "-") != "-" else "-"
+    matches = lifetime.get("Matches", "-")
+    
+    def draw_centered(cx, y, text, font, fill):
+        bbox = draw.textbbox((0, 0), text, font=font)
+        w = bbox[2] - bbox[0]
+        draw.text((cx - w/2, y), text, fill=fill, font=font)
+
+    draw_centered(x_off + 60, y_off + 80, str(wr), font_stat_val, (255, 255, 255))
+    draw_centered(x_off + 60, y_off + 100, "Win rate", font_stat_lbl, (180, 180, 180))
+    
+    draw_centered(x_off + 190, y_off + 80, f"{kd} / {hs}", font_stat_val, (255, 255, 255))
+    draw_centered(x_off + 190, y_off + 100, "Avg. K/D / HS", font_stat_lbl, (180, 180, 180))
+    
+    draw_centered(x_off + 320, y_off + 80, str(matches), font_stat_val, (255, 255, 255))
+    draw_centered(x_off + 320, y_off + 100, "Matches", font_stat_lbl, (180, 180, 180))
+    
+    avatar_img = await fetch_image(player_data.get("avatar", ""))
+    if avatar_img:
+        avatar = make_circle_avatar(avatar_img, (24, 24))
+        img.paste(avatar, (x_off + 20, y_off + 135), avatar)
+        nick_x = x_off + 55
+    else:
+        nick_x = x_off + 20
+        
+    draw.text((nick_x, y_off + 138), nickname.upper(), fill=(255, 255, 255), font=font_nick)
+    
+    recent = lifetime.get("Recent Results", [])
+    rx = x_off + 270
+    for res in recent:
+        if str(res) == "1":
+            draw.text((rx, y_off + 138), "W", fill=(45, 180, 45), font=font_recent)
+        else:
+            draw.text((rx, y_off + 138), "L", fill=(211, 44, 38), font=font_recent)
+        rx += 20
+
 async def generate_profile_card(nickname, player_data, stats_data, match_stats=None):
-    width, height = 700, 380
+    width = 400
+    height = 290 if match_stats else 200
+    
     img = apply_background(width, height)
     draw = ImageDraw.Draw(img)
 
-    font_title = get_font(34, bold=True)
-    font_text = get_font(24, bold=True)
-    font_small = get_font(18)
-    font_lvl = get_font(20, bold=True)
-
-    draw.text((30, 25), f"ПРОФІЛЬ: {nickname.upper()}", fill=(255, 85, 0), font=font_title)
-    
-    avatar_img = await fetch_image(player_data.get("avatar", "")) if player_data else None
-    if avatar_img:
-        avatar = make_circle_avatar(avatar_img, (80, 80))
-        img.paste(avatar, (550, 15), avatar)
-    
-    if player_data and not player_data.get('error'):
-        games = player_data.get("games", {})
-        cs2 = games.get("cs2", {})
-        elo = cs2.get("faceit_elo", "N/A")
-        lvl = cs2.get("skill_level", 1)
-        
-        draw.rectangle([30, 80, 670, 180], fill=(33, 36, 40, 255))
-        draw_faceit_level(draw, 50, 110, 40, lvl, font_lvl)
-        draw.text((100, 115), "Level", fill=(150, 150, 150), font=font_small)
-        
-        draw.text((250, 115), f"ELO: {elo}", fill=(255, 85, 0), font=font_text)
-    else:
-        draw.text((30, 80), "Гравець не знайдений.", fill=(255, 50, 50), font=font_text)
-
-    if stats_data and not stats_data.get('error'):
-        lifetime = stats_data.get("lifetime", {})
-        kd = lifetime.get("Average K/D Ratio", "N/A")
-        winrate = lifetime.get("Win Rate %", "N/A")
-        matches = lifetime.get("Matches", "N/A")
-        recent = lifetime.get("Recent Results", [])
-        
-        draw.text((50, 140), f"K/D: {kd}", fill=(200, 200, 200), font=font_small)
-        draw.text((250, 140), f"Вінрейт: {winrate}%", fill=(200, 200, 200), font=font_small)
-        draw.text((450, 140), f"Матчів: {matches}", fill=(200, 200, 200), font=font_small)
-        
-        draw.text((30, 200), "Останні ігри:", fill=(150, 150, 150), font=font_small)
-        rx = 180
-        for res in recent:
-            if str(res) == "1":
-                draw.rectangle([rx, 195, rx+25, 220], fill=(45, 150, 45, 255))
-            else:
-                draw.rectangle([rx, 195, rx+25, 220], fill=(200, 50, 50, 255))
-            rx += 30
+    await draw_compact_card(draw, img, 10, 10, nickname, player_data, stats_data)
 
     if match_stats:
-        draw.rectangle([30, 250, 670, 350], fill=(33, 36, 40, 255))
-        draw.text((50, 265), "ОСТАННІЙ МАТЧ", fill=(255, 85, 0), font=font_small)
-        draw.text((50, 300), match_stats, fill=(200, 200, 200), font=font_small)
+        draw_rounded_rect(draw, [10, 200, 390, 280], 8, (33, 36, 40, 255))
+        draw.text((25, 210), "ОСТАННІЙ МАТЧ", fill=(255, 85, 0), font=get_font(12, bold=True))
+        draw.text((25, 230), match_stats, fill=(200, 200, 200), font=get_font(14))
 
     output = BytesIO()
     img.save(output, format="PNG")
@@ -216,58 +234,21 @@ async def generate_profile_card(nickname, player_data, stats_data, match_stats=N
     return output
 
 async def generate_compare_card(nickname1, p1_data, p1_stats, nickname2, p2_data, p2_stats):
-    width, height = 700, 400
+    width, height = 820, 200
     img = apply_background(width, height)
     draw = ImageDraw.Draw(img)
 
-    font_title = get_font(30, bold=True)
-    font_text = get_font(24, bold=True)
-    font_small = get_font(18)
-
-    draw.text((30, 20), "ПОРІВНЯННЯ", fill=(255, 85, 0), font=font_title)
+    await draw_compact_card(draw, img, 10, 10, nickname1, p1_data, p1_stats)
+    await draw_compact_card(draw, img, 430, 10, nickname2, p2_data, p2_stats)
     
-    draw.text((150, 80), nickname1.upper(), fill=(255, 255, 255), font=font_text)
-    draw.text((450, 80), nickname2.upper(), fill=(255, 255, 255), font=font_text)
+    # VS badge in the middle
+    font_vs = get_font(24, bold=True)
+    bbox = draw.textbbox((0, 0), "VS", font=font_vs)
+    w = bbox[2] - bbox[0]
     
-    av1 = await fetch_image(p1_data.get("avatar", "")) if p1_data else None
-    av2 = await fetch_image(p2_data.get("avatar", "")) if p2_data else None
-    
-    if av1:
-        img.paste(make_circle_avatar(av1, (40, 40)), (100, 75), make_circle_avatar(av1, (40, 40)))
-    if av2:
-        img.paste(make_circle_avatar(av2, (40, 40)), (400, 75), make_circle_avatar(av2, (40, 40)))
-
-    def draw_stat(y, label, val1_str, val2_str, reverse=False):
-        draw.text((30, y), label, fill=(150, 150, 150), font=font_small)
-        try:
-            v1 = float(val1_str.replace('%', ''))
-            v2 = float(val2_str.replace('%', ''))
-            c1 = (45, 150, 45) if (v1 > v2 and not reverse) or (v1 < v2 and reverse) else ((200, 50, 50) if v1 != v2 else (200,200,200))
-            c2 = (45, 150, 45) if (v2 > v1 and not reverse) or (v2 < v1 and reverse) else ((200, 50, 50) if v1 != v2 else (200,200,200))
-        except:
-            c1 = c2 = (200, 200, 200)
-            
-        draw.text((150, y), str(val1_str), fill=c1, font=font_text)
-        draw.text((450, y), str(val2_str), fill=c2, font=font_text)
-
-    e1 = p1_data.get("games", {}).get("cs2", {}).get("faceit_elo", 0) if p1_data else 0
-    e2 = p2_data.get("games", {}).get("cs2", {}).get("faceit_elo", 0) if p2_data else 0
-    
-    kd1 = p1_stats.get("lifetime", {}).get("Average K/D Ratio", "0") if p1_stats else "0"
-    kd2 = p2_stats.get("lifetime", {}).get("Average K/D Ratio", "0") if p2_stats else "0"
-    
-    wr1 = p1_stats.get("lifetime", {}).get("Win Rate %", "0") if p1_stats else "0"
-    wr2 = p2_stats.get("lifetime", {}).get("Win Rate %", "0") if p2_stats else "0"
-    
-    m1 = p1_stats.get("lifetime", {}).get("Matches", "0") if p1_stats else "0"
-    m2 = p2_stats.get("lifetime", {}).get("Matches", "0") if p2_stats else "0"
-
-    draw.rectangle([20, 130, 680, 370], fill=(33, 36, 40, 255))
-
-    draw_stat(150, "ELO", str(e1), str(e2))
-    draw_stat(200, "K/D RATIO", str(kd1), str(kd2))
-    draw_stat(250, "ВІНРЕЙТ (%)", str(wr1), str(wr2))
-    draw_stat(300, "МАТЧІВ", str(m1), str(m2))
+    draw.ellipse([390, 80, 430, 120], fill=(22, 25, 27, 255))
+    draw.ellipse([392, 82, 428, 118], outline=(255, 85, 0), width=2)
+    draw.text((410 - w/2, 85), "VS", fill=(255, 85, 0), font=font_vs)
 
     output = BytesIO()
     img.save(output, format="PNG")
