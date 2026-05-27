@@ -136,12 +136,14 @@ async def generate_dashboard_banner(top_players):
         # Recent Results
         recent = lifetime.get("Recent Results", [])
         rx = 750
+        font_micro = get_font(10, bold=True)
         for res in recent:
             if str(res) == "1":
                 draw.rectangle([rx, y_offset + 18, rx + 14, y_offset + 32], fill=(45, 150, 45, 255))
-                # Text removed for minimalist faceit style, or kept very small. Let's just use green/red rectangles like faceit does.
+                draw.text((rx + 3, y_offset + 19), "W", fill=(255, 255, 255), font=font_micro)
             else:
                 draw.rectangle([rx, y_offset + 18, rx + 14, y_offset + 32], fill=(200, 50, 50, 255))
+                draw.text((rx + 4, y_offset + 19), "L", fill=(255, 255, 255), font=font_micro)
             rx += 18
 
         y_offset += row_height
@@ -254,3 +256,138 @@ async def generate_compare_card(nickname1, p1_data, p1_stats, nickname2, p2_data
     img.save(output, format="PNG")
     output.seek(0)
     return output
+
+async def generate_active_players_banner(active_matches):
+    """
+    active_matches: list of dicts:
+      {
+        "match_id": str,
+        "map": str,
+        "status": str,
+        "score": str,
+        "players": [{"nickname": str, "avatar": str, "team": str, "elo": int, "level": int}],
+      }
+    """
+    row_height = 50
+    header_height = 40
+    match_header_height = 40
+    width = 900
+
+    if not active_matches:
+        height = header_height + row_height
+        img = apply_background(width, height)
+        draw = ImageDraw.Draw(img)
+        
+        font_title = get_font(16, bold=True)
+        font_sub = get_font(14)
+        
+        # Header
+        draw.rectangle([0, 0, width, header_height], fill=(22, 25, 27, 255))
+        draw.ellipse([20, 12, 32, 24], fill=(80, 80, 80))
+        draw.text((40, 10), "LIVE MATCHES", fill=(80, 80, 80), font=font_title)
+        
+        # Empty row
+        draw.rectangle([0, header_height, width, header_height + row_height], fill=(33, 36, 40, 255))
+        draw.text((40, header_height + 15), "Зараз ніхто не грає", fill=(100, 100, 100), font=font_sub)
+        
+        output = BytesIO()
+        img.save(output, format="PNG")
+        output.seek(0)
+        return output
+
+    # Calculate height
+    total_player_rows = sum(len(m.get("players", [])) for m in active_matches)
+    height = header_height + len(active_matches) * match_header_height + total_player_rows * row_height
+    
+    img = apply_background(width, height)
+    draw = ImageDraw.Draw(img)
+
+    font_title = get_font(16, bold=True)
+    font_header = get_font(14, bold=True)
+    font_text = get_font(16, bold=True)
+    font_small = get_font(14, bold=True)
+    font_status = get_font(11, bold=True)
+    font_lvl = get_font(13, bold=True)
+
+    header_color = (113, 118, 122)
+
+    # Main header
+    draw.rectangle([0, 0, width, header_height], fill=(22, 25, 27, 255))
+    draw.ellipse([20, 12, 32, 24], fill=(45, 180, 45))
+    draw.text((40, 10), "LIVE MATCHES", fill=(45, 180, 45), font=font_title)
+    
+    count_text = f"{len(active_matches)} active"
+    bbox = draw.textbbox((0, 0), count_text, font=font_small)
+    draw.text((width - (bbox[2] - bbox[0]) - 20, 12), count_text, fill=(100, 100, 100), font=font_small)
+
+    y = header_height
+
+    for match in active_matches:
+        map_name = match.get("map", "Unknown")
+        status = match.get("status", "unknown").upper()
+        players = match.get("players", [])
+        
+        # Match header bar
+        draw.rectangle([0, y, width, y + match_header_height], fill=(22, 25, 27, 255))
+        draw.rectangle([0, y, 4, y + match_header_height], fill=(255, 85, 0))
+        
+        draw.text((20, y + 11), f"CS2  ·  {map_name}", fill=(255, 85, 0), font=font_header)
+        
+        # Status badge
+        if status in ("ONGOING", "LIVE", "READY", "CONFIGURING", "VOTING"):
+            badge_color = (45, 180, 45)
+            badge_text = "LIVE"
+        elif status == "FINISHED":
+            badge_color = (80, 80, 80)
+            badge_text = "FINISHED"
+        else:
+            badge_color = (255, 192, 0)
+            badge_text = status
+            
+        bbox = draw.textbbox((0, 0), badge_text, font=font_status)
+        bw = bbox[2] - bbox[0]
+        draw_rounded_rect(draw, [300, y + 10, 300 + bw + 14, y + 28], 4, badge_color)
+        draw.text((307, y + 12), badge_text, fill=(0, 0, 0), font=font_status)
+        
+        # Party badge
+        if len(players) > 1:
+            party_text = f"PARTY ({len(players)})"
+            bbox = draw.textbbox((0, 0), party_text, font=font_status)
+            pw = bbox[2] - bbox[0]
+            draw_rounded_rect(draw, [width - pw - 34, y + 10, width - 20, y + 28], 4, (110, 70, 200))
+            draw.text((width - pw - 27, y + 12), party_text, fill=(255, 255, 255), font=font_status)
+        
+        y += match_header_height
+        
+        # Player rows (same style as dashboard)
+        for j, player in enumerate(players):
+            bg_color = (33, 36, 40, 255) if j % 2 == 0 else (28, 30, 34, 255)
+            draw.rectangle([0, y, width, y + row_height], fill=bg_color)
+            
+            # Avatar
+            avatar_img = await fetch_image(player.get("avatar", ""))
+            if avatar_img:
+                avatar = make_circle_avatar(avatar_img, (34, 34))
+                img.paste(avatar, (25, y + 8), avatar)
+            
+            # Nickname
+            draw.text((70, y + 15), player.get("nickname", "Unknown"), fill=(240, 240, 240), font=font_text)
+            
+            # Level icon + ELO
+            lvl = player.get("level", 1)
+            elo = player.get("elo", 0)
+            draw_faceit_level(draw, 350, y + 12, 26, lvl, font_lvl)
+            draw.text((385, y + 16), str(elo), fill=(220, 220, 220), font=font_small)
+            
+            # Team name
+            team = player.get("team", "")
+            if team:
+                draw.text((550, y + 16), team, fill=(100, 100, 100), font=font_small)
+            
+            y += row_height
+
+    output = BytesIO()
+    img.save(output, format="PNG")
+    output.seek(0)
+    return output
+

@@ -39,3 +39,6 @@ class FaceitAPI:
         
     async def get_match_stats(self, match_id):
         return await self._get(f"/matches/{match_id}/stats")
+
+    async def get_match_details(self, match_id):
+        return await self._get(f"/matches/{match_id}")

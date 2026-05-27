@@ -2,10 +2,11 @@ import discord
 from discord.ext import commands, tasks
 from discord import app_commands
 import io
+import time
 
 from core import database, config
 from core.faceit_api import FaceitAPI
-from core.image_gen import generate_dashboard_banner, generate_profile_card, generate_compare_card
+from core.image_gen import generate_dashboard_banner, generate_profile_card, generate_compare_card, generate_active_players_banner
 
 class CompareSelect(discord.ui.Select):
     def __init__(self, bot, author_id, author_nickname):
@@ -116,7 +117,6 @@ class FaceitButtons(discord.ui.View):
 
     @discord.ui.button(label="Оновити Дашборд", style=discord.ButtonStyle.secondary, custom_id="faceit_btn_refresh")
     async def btn_refresh(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Відповідаємо відразу, але без надсилання тексту, щоб не спамити "Дашборд оновлено!"
         await interaction.response.defer()
         await self.cog.update_dashboard()
 
@@ -126,9 +126,11 @@ class FaceitCog(commands.Cog):
         self.bot = bot
         self.api = FaceitAPI()
         self.dashboard_task.start()
+        self.live_task.start()
 
     def cog_unload(self):
         self.dashboard_task.cancel()
+        self.live_task.cancel()
 
     @app_commands.command(name="faceit_link", description="Прив'язати свій FaceIT акаунт")
     @app_commands.describe(nickname="Ваш нікнейм на FaceIT")
@@ -196,15 +198,18 @@ class FaceitCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         
         msg_top = await channel.send("⏳ Генерую Дашборд...")
+        msg_live = await channel.send("⏳ Завантаження активних матчів...")
         
         dash_data = {
             "channel_id": channel.id,
-            "msg_top_id": msg_top.id
+            "msg_top_id": msg_top.id,
+            "msg_live_id": msg_live.id
         }
         database.save_faceit_dashboard(dash_data)
         
         await interaction.followup.send(f"✅ FaceIT Dashboard успішно встановлено в {channel.mention}!", ephemeral=True)
         await self.update_dashboard()
+        await self.update_live()
 
     @tasks.loop(minutes=10)
     async def dashboard_task(self):
@@ -212,6 +217,14 @@ class FaceitCog(commands.Cog):
 
     @dashboard_task.before_loop
     async def before_dashboard_task(self):
+        await self.bot.wait_until_ready()
+
+    @tasks.loop(minutes=2)
+    async def live_task(self):
+        await self.update_live()
+
+    @live_task.before_loop
+    async def before_live_task(self):
         await self.bot.wait_until_ready()
 
     async def update_dashboard(self):
@@ -239,7 +252,6 @@ class FaceitCog(commands.Cog):
                 elo = cs2.get("faceit_elo", 0)
                 level = cs2.get("skill_level", 1)
                 
-                # Завантажуємо стату для дашборду
                 stats_data = await self.api.get_player_stats(player_id)
                 
                 top_players.append({
@@ -250,10 +262,8 @@ class FaceitCog(commands.Cog):
                     "avatar": player_data.get("avatar", "")
                 })
         
-        # Sort top players
         top_players = sorted(top_players, key=lambda x: x["elo"], reverse=True)[:10]
         
-        # Generate image
         img_top = await generate_dashboard_banner(top_players)
         
         try:
@@ -262,6 +272,115 @@ class FaceitCog(commands.Cog):
             await msg_top.edit(content="", attachments=[file_top], view=FaceitButtons(self.bot, self))
         except Exception as e:
             print(f"FaceIT top edit error: {e}")
+
+    async def update_live(self):
+        dash_data = database.load_faceit_dashboard()
+        if not dash_data: return
+        
+        channel_id = dash_data.get("channel_id")
+        msg_live_id = dash_data.get("msg_live_id")
+        
+        if not channel_id or not msg_live_id: return
+        channel = self.bot.get_channel(channel_id)
+        if not channel: return
+        
+        users = database.load_faceit_users()
+        if not users: return
+        
+        # Collect player IDs and their data
+        player_map = {}  # player_id -> {nickname, avatar, elo, level}
+        for uid, nickname in users.items():
+            player_data = await self.api.get_player_by_nickname(nickname)
+            if player_data and 'error' not in player_data:
+                pid = player_data.get("player_id")
+                games = player_data.get("games", {})
+                cs2 = games.get("cs2", {})
+                player_map[pid] = {
+                    "nickname": nickname,
+                    "avatar": player_data.get("avatar", ""),
+                    "elo": cs2.get("faceit_elo", 0),
+                    "level": cs2.get("skill_level", 1)
+                }
+        
+        # Check each player's latest match
+        active_match_ids = {}  # match_id -> list of our player_ids in that match
+        for pid in player_map:
+            history = await self.api.get_player_history(pid, limit=1)
+            if history and "items" in history and history["items"]:
+                last_match = history["items"][0]
+                match_id = last_match.get("match_id")
+                status = last_match.get("status", "").lower()
+                
+                # Check if the match is not finished
+                finished_at = last_match.get("finished_at", 0)
+                started_at = last_match.get("started_at", 0)
+                
+                now_ts = int(time.time())
+                
+                # Match is active if status is not finished, or if it started recently and has no finish time
+                is_active = False
+                if status in ("ongoing", "ready", "configuring", "voting", "captain_pick"):
+                    is_active = True
+                elif status != "finished" and finished_at == 0 and started_at > 0:
+                    is_active = True
+                
+                if is_active:
+                    if match_id not in active_match_ids:
+                        active_match_ids[match_id] = []
+                    active_match_ids[match_id].append(pid)
+        
+        # Build match details for active matches
+        active_matches = []
+        for match_id, pids in active_match_ids.items():
+            match_details = await self.api.get_match_details(match_id)
+            if not match_details or match_details.get("error"):
+                continue
+            
+            map_name = "Unknown"
+            voting = match_details.get("voting", {})
+            if voting and "map" in voting and "pick" in voting["map"]:
+                picks = voting["map"]["pick"]
+                if picks:
+                    map_name = picks[0] if isinstance(picks, list) else str(picks)
+            
+            configured = match_details.get("configured_at", 0)
+            status = match_details.get("status", "unknown")
+            
+            # Find which team our players are on
+            players_info = []
+            teams = match_details.get("teams", {})
+            for faction_key, faction in teams.items():
+                team_name = faction.get("name", faction_key)
+                roster = faction.get("roster", [])
+                for r in roster:
+                    rpid = r.get("player_id", "")
+                    if rpid in pids:
+                        pdata = player_map.get(rpid, {})
+                        players_info.append({
+                            "nickname": pdata.get("nickname", "Unknown"),
+                            "avatar": pdata.get("avatar", ""),
+                            "team": team_name,
+                            "elo": pdata.get("elo", 0),
+                            "level": pdata.get("level", 1)
+                        })
+            
+            active_matches.append({
+                "match_id": match_id,
+                "map": map_name,
+                "status": status,
+                "score": "",
+                "players": players_info
+            })
+        
+        # Generate image
+        img_live = await generate_active_players_banner(active_matches)
+        
+        try:
+            msg_live = await channel.fetch_message(msg_live_id)
+            file_live = discord.File(fp=img_live, filename="live.png")
+            await msg_live.edit(content="", attachments=[file_live])
+        except Exception as e:
+            print(f"FaceIT live edit error: {e}")
 
 
 async def setup(bot):
