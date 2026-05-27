@@ -380,10 +380,13 @@ class CommandsCog(commands.Cog):
         config.fame_games_msg_id = None
         database.save_message_ids()
         
-        await interaction.response.send_message(f"✅ Канал моніторингу встановлено на {channel.mention}! Дані оновляться найближчим часом.")
+        await interaction.response.send_message(f"✅ Канал моніторингу встановлено на {channel.mention}! Видаліть усі старі повідомлення бота в цьому каналі, зараз він надішле нові в правильному порядку.")
         
-        asyncio.create_task(utils.update_live_message(interaction.guild, self.bot))
-        asyncio.create_task(utils.update_fame_message(interaction.guild, self.bot))
+        async def send_in_order():
+            await utils.update_fame_message(interaction.guild, self.bot)
+            await utils.update_live_message(interaction.guild, self.bot)
+            
+        asyncio.create_task(send_in_order())
 
 async def setup(bot):
     await bot.add_cog(CommandsCog(bot))
