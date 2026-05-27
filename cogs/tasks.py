@@ -8,23 +8,35 @@ class TasksCog(commands.Cog):
         self.bot = bot
         self.periodic_save.start()
         self.daily_report.start()
-        self.update_dashboards.start()
+        self.update_live_dashboards.start()
+        self.update_fame_dashboards.start()
 
     def cog_unload(self):
         self.periodic_save.cancel()
         self.daily_report.cancel()
-        self.update_dashboards.cancel()
+        self.update_live_dashboards.cancel()
+        self.update_fame_dashboards.cancel()
 
     @tasks.loop(minutes=1)
-    async def update_dashboards(self):
+    async def update_live_dashboards(self):
+        if not config.GLOBAL_SETTINGS["monitoring"]:
+            return
+        for guild in self.bot.guilds:
+            await utils.update_live_message(guild, self.bot)
+
+    @update_live_dashboards.before_loop
+    async def before_update_live_dashboards(self):
+        await self.bot.wait_until_ready()
+
+    @tasks.loop(hours=1)
+    async def update_fame_dashboards(self):
         if not config.GLOBAL_SETTINGS["monitoring"] and not config.GLOBAL_SETTINGS["voice_stats"]:
             return
         for guild in self.bot.guilds:
             await utils.update_fame_message(guild, self.bot)
-            await utils.update_live_message(guild, self.bot)
 
-    @update_dashboards.before_loop
-    async def before_update_dashboards(self):
+    @update_fame_dashboards.before_loop
+    async def before_update_fame_dashboards(self):
         await self.bot.wait_until_ready()
 
     @tasks.loop(minutes=2)

@@ -89,14 +89,21 @@ def load_message_ids():
             with open(config.MSG_FILE, "r", encoding="utf-8") as f:
                 d = json.load(f)
             config.live_message_id = d.get("live")
-            config.fame_message_id = d.get("fame")
+            config.fame_voice_msg_id = d.get("fame_voice")
+            config.fame_streaks_msg_id = d.get("fame_streaks")
+            config.fame_games_msg_id = d.get("fame_games")
         except: pass
 
 def save_message_ids():
     try:
         tmp_file = config.MSG_FILE + ".tmp"
         with open(tmp_file, "w", encoding="utf-8") as f:
-            json.dump({"live": config.live_message_id, "fame": config.fame_message_id}, f)
+            json.dump({
+                "live": config.live_message_id, 
+                "fame_voice": config.fame_voice_msg_id,
+                "fame_streaks": config.fame_streaks_msg_id,
+                "fame_games": config.fame_games_msg_id
+            }, f)
         os.replace(tmp_file, config.MSG_FILE)
     except Exception as e: print(f"ERROR save_message_ids: {e}")
 
@@ -324,3 +331,20 @@ def save_bot_voice(channel_id):
             json.dump({"channel_id": channel_id}, f)
         os.replace(tmp_file, config.BOT_VOICE_FILE)
     except Exception as e: print(f"ERROR save_bot_voice: {e}")
+
+def load_monitor_channel():
+    if os.path.exists(config.MONITOR_CHANNEL_FILE):
+        try:
+            with open(config.MONITOR_CHANNEL_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data.get("channel_id")
+        except: pass
+    return None
+
+def save_monitor_channel(channel_id):
+    try:
+        tmp_file = config.MONITOR_CHANNEL_FILE + ".tmp"
+        with open(tmp_file, "w", encoding="utf-8") as f:
+            json.dump({"channel_id": channel_id}, f)
+        os.replace(tmp_file, config.MONITOR_CHANNEL_FILE)
+    except Exception as e: print(f"ERROR save_monitor_channel: {e}")

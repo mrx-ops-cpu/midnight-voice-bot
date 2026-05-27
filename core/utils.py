@@ -202,12 +202,25 @@ def build_live_embed(guild, bot):
     embed.set_footer(text="🔴 Live • Топ 10 • Оновлюється автоматично")
     return embed
 
-def build_fame_embed(guild, bot):
-    embed = discord.Embed(title="🏛️ Зал Слави", color=0xf1c40f, timestamp=datetime.now(timezone.utc))
-    s = database.load_stats()
-    medals = ["🥇","🥈","🥉"]
-    game_medals = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+def get_user_avatar(uid, guild, bot):
+    try:
+        m = guild.get_member(int(uid)) if guild else None
+        if m and m.display_avatar: return m.display_avatar.url
+        if bot:
+            u = bot.get_user(int(uid))
+            if u and u.display_avatar: return u.display_avatar.url
+    except: pass
+    return ""
 
+async def update_fame_message(guild, bot):
+    from core import image_gen
+    monitor_id = database.load_monitor_channel() or config.GAMING_MONITOR_ID
+    ch = bot.get_channel(monitor_id)
+    if not ch: return
+    
+    s = database.load_stats()
+    
+    # --- VOICE DATA ---
     total = dict(s.get("total", {}))
     for uid, start in config.voice_start_times.items():
         k = str(uid)
@@ -217,13 +230,13 @@ def build_fame_embed(guild, bot):
         except: pass
         
     top3_voice = sorted(total.items(), key=lambda x: float(x[1]) if isinstance(x[1], (int, float)) else 0, reverse=True)[:3]
-    voice_lines = []
-    for i, (uid, sec) in enumerate(top3_voice):
+    top_voice_data = []
+    for uid, sec in top3_voice:
         name = database.get_display_name(uid, guild, bot)
-        voice_lines.append(f"{medals[i]} **{name}**{fame_streak_emoji(uid)} — `{format_time(sec)}`")
-        
-    embed.add_field(name="🎙️ Топ войсу (За весь час)", value="\n".join(voice_lines) if voice_lines else "*Немає даних*", inline=False)
+        avatar = get_user_avatar(uid, guild, bot)
+        top_voice_data.append({"name": name, "time": format_time(sec), "avatar_url": avatar})
 
+    # --- STREAKS DATA ---
     voice_streaks_data = s.get("streaks", {})
     active_streaks = {}
     for uid_str, entry in voice_streaks_data.items():
@@ -232,36 +245,84 @@ def build_fame_embed(guild, bot):
             active_streaks[uid_str] = streak
 
     top3_streaks = sorted(active_streaks.items(), key=lambda x: x[1], reverse=True)[:3]
-    streak_lines = []
-    for i, (uid_str, streak_count) in enumerate(top3_streaks):
+    top_streaks_data = []
+    for uid_str, streak_count in top3_streaks:
         name = database.get_display_name(uid_str, guild, bot)
-        streak_lines.append(f"{medals[i]} **{name}** — 🔥 `{streak_count} днів підряд`")
+        avatar = get_user_avatar(uid_str, guild, bot)
+        top_streaks_data.append({"name": name, "streak": f"{streak_count} днів підряд", "avatar_url": avatar})
 
-    embed.add_field(name="🔥 Топ серії в войсі", value="\n".join(streak_lines) + "\n──────────────────────────" if streak_lines else "*Немає даних*\n──────────────────────────", inline=False)
+    # --- GAMES DATA ---
+    top_games = database.get_top_games(limit_games=5, limit_players=1)
+    top_games_data = []
+    
+    game_icons = {
+        "cs2": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/730/69f7ebe2735c366c65c0b33dae00e12dc40edbe4.jpg",
+        "dota 2": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/570/0b00f1c1bad8a0699bc22bc9ed6f93d3950b73c4.jpg",
+        "gta v": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/271590/1e72f87eb927fa1485e68aefaff23c7fd7178051.jpg",
+        "rust": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/252490/4dfb2d6ffbb495d4f10738e4aee4a706da62828e.jpg",
+        "pubg": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/578080/2d49cfbb32c0201d810ba2d1ba704d2bfb2ca617.jpg"
+    }
 
-    embed.add_field(name="🎮 Топ 10 ігор на сервері", value="──────────────────────────", inline=False)
-
-    top_games = database.get_top_games(limit_games=10, limit_players=3) 
     if top_games:
-        for i, (game, data) in enumerate(top_games.items()):
-            plines = []
-            for j, (uid, sec) in enumerate(data["players"]):
-                name = database.get_display_name(uid, guild, bot)
-                plines.append(f"{medals[j]} {name} — `{format_time(sec)}`")
+        for game, data in top_games.items():
+            icon_url = game_icons.get(game.lower(), "")
+            mvp_data = None
+            if data["players"]:
+                mvp_uid, mvp_sec = data["players"][0]
+                mvp_name = database.get_display_name(mvp_uid, guild, bot)
+                mvp_avatar = get_user_avatar(mvp_uid, guild, bot)
+                mvp_data = {"name": mvp_name, "time": format_time(mvp_sec), "avatar_url": mvp_avatar}
             
-            embed.add_field(
-                name=f"{game_medals[i]} {game}  ·  {format_time(data['total'])} загалом", 
-                value="\n".join(plines) + ("\n──────────────────────────" if i < len(top_games)-1 else ""), 
-                inline=False
-            )
-    else:
-        embed.add_field(name="🎮 Ігри", value="*Ще немає даних*", inline=False)
+            top_games_data.append({
+                "name": game,
+                "time": format_time(data['total']),
+                "icon_url": icon_url,
+                "mvp": mvp_data
+            })
 
-    embed.set_footer(text="⭐ Зал Слави • Накопичується назавжди")
-    return embed
+    # Generate images
+    voice_file = discord.File(await image_gen.generate_voice_image(top_voice_data), filename="fame_voice.png")
+    streaks_file = discord.File(await image_gen.generate_streaks_image(top_streaks_data), filename="fame_streaks.png")
+    games_file = discord.File(await image_gen.generate_games_image(top_games_data), filename="fame_games.png")
+
+    # Hashes (serialize data dicts to check for changes)
+    def hash_data(d): return hashlib.md5(json.dumps(d, sort_keys=True).encode('utf-8')).hexdigest()
+    
+    current_voice_hash = hash_data(top_voice_data)
+    current_streaks_hash = hash_data(top_streaks_data)
+    current_games_hash = hash_data(top_games_data)
+    
+    async def update_msg(msg_id_attr, hash_attr, current_hash, file_obj):
+        saved_hash = getattr(config, hash_attr, None)
+        msg_id = getattr(config, msg_id_attr, None)
+        
+        if saved_hash == current_hash and msg_id:
+            return msg_id # No change needed
+            
+        if msg_id:
+            try:
+                msg = await ch.fetch_message(msg_id)
+                await msg.edit(attachments=[file_obj], embed=None)
+                setattr(config, hash_attr, current_hash)
+                return msg_id
+            except discord.NotFound:
+                setattr(config, msg_id_attr, None)
+                
+        # Send new
+        msg = await ch.send(file=file_obj)
+        setattr(config, hash_attr, current_hash)
+        return msg.id
+
+    # Update messages
+    config.fame_games_msg_id = await update_msg('fame_games_msg_id', 'last_fame_games_hash', current_games_hash, games_file)
+    config.fame_voice_msg_id = await update_msg('fame_voice_msg_id', 'last_fame_voice_hash', current_voice_hash, voice_file)
+    config.fame_streaks_msg_id = await update_msg('fame_streaks_msg_id', 'last_fame_streaks_hash', current_streaks_hash, streaks_file)
+    
+    database.save_message_ids()
 
 async def update_live_message(guild, bot):
-    ch = bot.get_channel(config.GAMING_MONITOR_ID)
+    monitor_id = database.load_monitor_channel() or config.GAMING_MONITOR_ID
+    ch = bot.get_channel(monitor_id)
     if not ch: return
     embed = build_live_embed(guild, bot)
     
@@ -293,35 +354,4 @@ async def update_live_message(guild, bot):
     config.last_live_hash = current_hash
     database.save_message_ids()
 
-async def update_fame_message(guild, bot):
-    ch = bot.get_channel(config.GAMING_MONITOR_ID)
-    if not ch: return
-    embed = build_fame_embed(guild, bot)
-    
-    current_hash = get_embed_hash(embed)
-    if getattr(config, 'last_fame_hash', None) == current_hash:
-        return # Якщо вміст не змінився — пропускаємо запит до Discord
-        
-    if config.fame_message_id:
-        try:
-            msg = await ch.fetch_message(config.fame_message_id)
-            await msg.edit(embed=embed)
-            config.last_fame_hash = current_hash
-            return
-        except discord.NotFound:
-            config.fame_message_id = None
-            
-    try:
-        async for msg in ch.history(limit=30):
-            if msg.author.id == bot.user.id and msg.embeds and "Слави" in (msg.embeds[0].title or ""):
-                config.fame_message_id = msg.id
-                await msg.edit(embed=embed)
-                config.last_fame_hash = current_hash
-                database.save_message_ids()
-                return
-    except: pass
-    
-    msg = await ch.send(embed=embed)
-    config.fame_message_id = msg.id
-    config.last_fame_hash = current_hash
-    database.save_message_ids()
+# Build fame embed removed

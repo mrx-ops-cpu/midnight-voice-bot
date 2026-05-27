@@ -391,3 +391,160 @@ async def generate_active_players_banner(active_matches):
     output.seek(0)
     return output
 
+async def generate_voice_image(top_voice_data):
+    width = 900
+    row_height = 50
+    header_height = 40
+    
+    height = header_height + max(1, len(top_voice_data)) * row_height
+    img = apply_background(width, height)
+    draw = ImageDraw.Draw(img)
+    
+    font_header = get_font(14, bold=True)
+    font_text = get_font(16, bold=True)
+    font_small = get_font(14)
+    
+    draw.rectangle([0, 0, width, header_height], fill=(22, 25, 27, 255))
+    draw.text((30, 12), "TOP VOICE (За весь час)", fill=(200, 200, 200), font=font_header)
+    
+    y = header_height
+    for i, p in enumerate(top_voice_data):
+        bg_color = (33, 36, 40, 255) if i % 2 == 0 else (28, 30, 34, 255)
+        draw.rectangle([0, y, width, y + row_height], fill=bg_color)
+        
+        color_rank = (255, 215, 0) if i == 0 else (192, 192, 192) if i == 1 else (205, 127, 50) if i == 2 else (60, 60, 60)
+        draw.rectangle([0, y, 4, y + row_height], fill=color_rank)
+        draw.text((25, y + 16), f"#{i+1}", fill=color_rank, font=font_small)
+        
+        avatar_img = await fetch_image(p.get("avatar_url", ""))
+        if avatar_img:
+            avatar = make_circle_avatar(avatar_img, (34, 34))
+            img.paste(avatar, (65, y + 8), avatar)
+        else:
+            draw.ellipse([65, y+8, 99, y+42], fill=(60, 60, 60))
+            
+        draw.text((120, y + 15), p.get("name", "Unknown"), fill=(240, 240, 240), font=font_text)
+        draw.text((780, y + 16), p.get("time", "0"), fill=(255, 180, 50), font=font_text)
+        
+        y += row_height
+        
+    output = BytesIO()
+    img.save(output, format="PNG")
+    output.seek(0)
+    return output
+
+async def generate_streaks_image(top_streaks_data):
+    width = 900
+    row_height = 50
+    header_height = 40
+    
+    height = header_height + max(1, len(top_streaks_data)) * row_height
+    img = apply_background(width, height)
+    draw = ImageDraw.Draw(img)
+    
+    font_header = get_font(14, bold=True)
+    font_text = get_font(16, bold=True)
+    font_small = get_font(14)
+    
+    draw.rectangle([0, 0, width, header_height], fill=(22, 25, 27, 255))
+    draw.text((30, 12), "ТОП СЕРІЇ В ВОЙСІ", fill=(200, 200, 200), font=font_header)
+    
+    fire_img = await fetch_image("https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/1f525.png")
+    if fire_img:
+        fire_img = fire_img.resize((20, 20))
+    
+    y = header_height
+    for i, p in enumerate(top_streaks_data):
+        bg_color = (33, 36, 40, 255) if i % 2 == 0 else (28, 30, 34, 255)
+        draw.rectangle([0, y, width, y + row_height], fill=bg_color)
+        
+        color_rank = (255, 215, 0) if i == 0 else (192, 192, 192) if i == 1 else (205, 127, 50) if i == 2 else (60, 60, 60)
+        draw.rectangle([0, y, 4, y + row_height], fill=color_rank)
+        draw.text((25, y + 16), f"#{i+1}", fill=color_rank, font=font_small)
+        
+        avatar_img = await fetch_image(p.get("avatar_url", ""))
+        if avatar_img:
+            avatar = make_circle_avatar(avatar_img, (34, 34))
+            img.paste(avatar, (65, y + 8), avatar)
+        else:
+            draw.ellipse([65, y+8, 99, y+42], fill=(60, 60, 60))
+            
+        draw.text((120, y + 15), p.get("name", "Unknown"), fill=(240, 240, 240), font=font_text)
+        
+        text_x = 760
+        if fire_img:
+            img.paste(fire_img, (text_x - 26, y + 14), fire_img)
+            
+        draw.text((text_x, y + 16), p.get("streak", "0"), fill=(255, 120, 0), font=font_text)
+        
+        y += row_height
+        
+    output = BytesIO()
+    img.save(output, format="PNG")
+    output.seek(0)
+    return output
+
+async def generate_games_image(top_games_data):
+    width = 900
+    row_height = 50
+    header_height = 40
+    
+    height = header_height + max(1, len(top_games_data)) * row_height
+    img = apply_background(width, height)
+    draw = ImageDraw.Draw(img)
+    
+    font_header = get_font(14, bold=True)
+    font_text = get_font(16, bold=True)
+    font_small = get_font(14)
+    font_tiny = get_font(12, bold=True)
+    
+    draw.rectangle([0, 0, width, header_height], fill=(22, 25, 27, 255))
+    draw.text((30, 12), "TOP ІГОР (За весь час)", fill=(200, 200, 200), font=font_header)
+    
+    y = header_height
+    for i, g in enumerate(top_games_data):
+        bg_color = (33, 36, 40, 255) if i % 2 == 0 else (28, 30, 34, 255)
+        draw.rectangle([0, y, width, y + row_height], fill=bg_color)
+        
+        color_rank = (255, 215, 0) if i == 0 else (192, 192, 192) if i == 1 else (205, 127, 50) if i == 2 else (60, 60, 60)
+        draw.rectangle([0, y, 4, y + row_height], fill=color_rank)
+        
+        draw.text((20, y + 16), f"#{i+1}", fill=color_rank, font=font_small)
+        
+        icon_url = g.get("icon_url", "")
+        if icon_url:
+            icon_img = await fetch_image(icon_url)
+            if icon_img:
+                icon_img = icon_img.resize((26, 26))
+                img.paste(icon_img, (55, y + 12))
+            else:
+                draw.rectangle([55, y + 12, 81, y + 38], fill=(60, 60, 60))
+        else:
+            draw.rectangle([55, y + 12, 81, y + 38], fill=(60, 60, 60))
+            
+        draw.text((95, y + 15), g.get("name", "Unknown"), fill=(240, 240, 240), font=font_text)
+        
+        draw.text((350, y + 16), g.get("time", "0"), fill=(150, 150, 150), font=font_small)
+        
+        mvp = g.get("mvp")
+        if mvp:
+            draw_rounded_rect(draw, [550, y+16, 585, y+34], 4, (255, 192, 0, 40)) 
+            draw.text((556, y+18), "MVP", fill=(255, 215, 0), font=font_tiny)
+            
+            mvp_avatar = await fetch_image(mvp.get("avatar_url", ""))
+            if mvp_avatar:
+                m_avatar = make_circle_avatar(mvp_avatar, (24, 24))
+                img.paste(m_avatar, (595, y + 13), m_avatar)
+            else:
+                draw.ellipse([595, y+13, 619, y+37], fill=(60, 60, 60))
+                
+            draw.text((630, y + 16), mvp.get("name", ""), fill=(220, 220, 220), font=font_text)
+            draw.text((780, y + 16), mvp.get("time", ""), fill=(120, 120, 120), font=font_small)
+        
+        y += row_height
+        
+    output = BytesIO()
+    img.save(output, format="PNG")
+    output.seek(0)
+    return output
+

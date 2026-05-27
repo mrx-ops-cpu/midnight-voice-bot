@@ -366,5 +366,24 @@ class CommandsCog(commands.Cog):
             
         await interaction.response.send_message(f"✅ Бот тепер завжди буде сидіти у **{channel.name}**!")
 
+    @app_commands.command(name="setmonitorchannel", description="Обрати канал для Активних каток та Залу Слави")
+    @app_commands.describe(channel="Текстовий канал")
+    async def setmonitorchannel(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        if not interaction.user.guild_permissions.administrator:
+            return await interaction.response.send_message("❌ Тільки адмін може це зробити!", ephemeral=True)
+            
+        database.save_monitor_channel(channel.id)
+        
+        config.live_message_id = None
+        config.fame_voice_msg_id = None
+        config.fame_streaks_msg_id = None
+        config.fame_games_msg_id = None
+        database.save_message_ids()
+        
+        await interaction.response.send_message(f"✅ Канал моніторингу встановлено на {channel.mention}! Дані оновляться найближчим часом.")
+        
+        asyncio.create_task(utils.update_live_message(interaction.guild, self.bot))
+        asyncio.create_task(utils.update_fame_message(interaction.guild, self.bot))
+
 async def setup(bot):
     await bot.add_cog(CommandsCog(bot))

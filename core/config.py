@@ -26,6 +26,7 @@ FACEIT_FILE        = os.path.join(DATA_DIR, "faceit_users.json")
 FACEIT_DASHBOARD_FILE = os.path.join(DATA_DIR, "faceit_dashboard.json")
 MAFIA_FILE         = os.path.join(DATA_DIR, "mafia_stats.json")
 BOT_VOICE_FILE     = os.path.join(DATA_DIR, "bot_voice.json")
+MONITOR_CHANNEL_FILE = os.path.join(DATA_DIR, "monitor_channel.json")
 
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -34,11 +35,15 @@ voice_last_save   = {}
 game_sessions     = {}
 active_rooms      = {}
 
-live_message_id   = None
-fame_message_id   = None
+live_message_id     = None
+fame_voice_msg_id   = None
+fame_streaks_msg_id = None
+fame_games_msg_id   = None
 
-last_live_hash    = None
-last_fame_hash    = None
+last_live_hash         = None
+last_fame_voice_hash   = None
+last_fame_streaks_hash = None
+last_fame_games_hash   = None
 
 SAY_LIMIT         = 3
 say_usage         = {}
