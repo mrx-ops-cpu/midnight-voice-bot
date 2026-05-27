@@ -5,12 +5,13 @@ import io
 
 from core import database, config
 from core.faceit_api import FaceitAPI
-from core.image_gen import generate_top_banner, generate_active_matches_banner, generate_profile_card
+from core.image_gen import generate_dashboard_banner, generate_profile_card
 
 class FaceitButtons(discord.ui.View):
-    def __init__(self, bot):
+    def __init__(self, bot, cog):
         super().__init__(timeout=None)
         self.bot = bot
+        self.cog = cog
         self.api = FaceitAPI()
 
     @discord.ui.button(label="Мій Профіль", style=discord.ButtonStyle.primary, custom_id="faceit_btn_profile")
@@ -29,10 +30,41 @@ class FaceitButtons(discord.ui.View):
         player_id = player_data.get("player_id")
         stats_data = await self.api.get_player_stats(player_id)
         
-        img_bytes = await generate_profile_card(nickname, player_data, stats_data)
+        # Отримуємо детальну статистику останнього матчу
+        match_stats_str = "Немає інформації про останній матч."
+        history = await self.api.get_player_history(player_id, limit=1)
+        if history and "items" in history and history["items"]:
+            last_match = history["items"][0]
+            match_id = last_match.get("match_id")
+            detailed = await self.api.get_match_stats(match_id)
+            if detailed and "rounds" in detailed and detailed["rounds"]:
+                rnd = detailed["rounds"][0]
+                map_name = rnd.get("round_stats", {}).get("Map", "Unknown")
+                score = rnd.get("round_stats", {}).get("Score", "")
+                
+                teams = rnd.get("teams", [])
+                for team in teams:
+                    for p in team.get("players", []):
+                        if p.get("player_id") == player_id:
+                            p_stats = p.get("player_stats", {})
+                            kills = p_stats.get("Kills", "0")
+                            deaths = p_stats.get("Deaths", "0")
+                            kd = p_stats.get("K/D Ratio", "0")
+                            hs = p_stats.get("Headshots %", "0")
+                            res = "✅ Перемога" if p_stats.get("Result") == "1" else "❌ Поразка"
+                            match_stats_str = f"{res} на {map_name} [{score}]\nKills: {kills} | Deaths: {deaths} | K/D: {kd} | HS: {hs}%"
+                            break
+
+        img_bytes = await generate_profile_card(nickname, player_data, stats_data, match_stats_str)
         file = discord.File(fp=img_bytes, filename="profile.png")
         
         await interaction.followup.send(file=file, ephemeral=True)
+
+    @discord.ui.button(label="Оновити Дашборд", style=discord.ButtonStyle.secondary, custom_id="faceit_btn_refresh")
+    async def btn_refresh(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        await self.cog.update_dashboard()
+        await interaction.followup.send("✅ Дашборд оновлено!", ephemeral=True)
 
 
 class FaceitCog(commands.Cog):
@@ -68,14 +100,11 @@ class FaceitCog(commands.Cog):
             
         await interaction.response.defer(ephemeral=True)
         
-        # Відправляємо два стартових повідомлення
-        msg_top = await channel.send("⏳ Генерую ТОП гравців...")
-        msg_active = await channel.send("⏳ Генерую Активні матчі...")
+        msg_top = await channel.send("⏳ Генерую Дашборд...")
         
         dash_data = {
             "channel_id": channel.id,
-            "msg_top_id": msg_top.id,
-            "msg_active_id": msg_active.id
+            "msg_top_id": msg_top.id
         }
         database.save_faceit_dashboard(dash_data)
         
@@ -96,9 +125,8 @@ class FaceitCog(commands.Cog):
         
         channel_id = dash_data.get("channel_id")
         msg_top_id = dash_data.get("msg_top_id")
-        msg_active_id = dash_data.get("msg_active_id")
         
-        if not channel_id: return
+        if not channel_id or not msg_top_id: return
         channel = self.bot.get_channel(channel_id)
         if not channel: return
         
@@ -106,7 +134,6 @@ class FaceitCog(commands.Cog):
         if not users: return
         
         top_players = []
-        active_matches = []
         
         for uid, nickname in users.items():
             player_data = await self.api.get_player_by_nickname(nickname)
@@ -121,43 +148,20 @@ class FaceitCog(commands.Cog):
                     "elo": elo,
                     "level": level
                 })
-                
-                # Check recent history for match
-                player_id = player_data.get("player_id")
-                history = await self.api.get_player_history(player_id, limit=1)
-                if history and "items" in history and history["items"]:
-                    last_match = history["items"][0]
-                    # We approximate ongoing match if status is somehow not CANCELLED or FINISHED, 
-                    # but usually history only shows finished. We will just show last match status.
-                    status = last_match.get("status", "UNKNOWN")
-                    # If it's finished, maybe we ignore it for "active", but let's show recent if no active
-                    active_matches.append({
-                        "nickname": nickname,
-                        "match_status": status
-                    })
         
         # Sort top players
         top_players = sorted(top_players, key=lambda x: x["elo"], reverse=True)[:10]
         
-        # Generate images
-        img_top = await generate_top_banner(top_players)
-        img_active = await generate_active_matches_banner(active_matches[:5])
+        # Generate image
+        img_top = await generate_dashboard_banner(top_players)
         
         try:
             msg_top = await channel.fetch_message(msg_top_id)
-            file_top = discord.File(fp=img_top, filename="top.png")
-            await msg_top.edit(content="", attachments=[file_top])
+            file_top = discord.File(fp=img_top, filename="dashboard.png")
+            await msg_top.edit(content="", attachments=[file_top], view=FaceitButtons(self.bot, self))
         except Exception as e:
             print(f"FaceIT top edit error: {e}")
-            
-        try:
-            msg_active = await channel.fetch_message(msg_active_id)
-            file_active = discord.File(fp=img_active, filename="active.png")
-            await msg_active.edit(content="", attachments=[file_active], view=FaceitButtons(self.bot))
-        except Exception as e:
-            print(f"FaceIT active edit error: {e}")
 
 
 async def setup(bot):
     await bot.add_cog(FaceitCog(bot))
-    bot.add_view(FaceitButtons(bot))

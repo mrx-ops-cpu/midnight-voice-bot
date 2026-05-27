@@ -36,3 +36,6 @@ class FaceitAPI:
 
     async def get_player_history(self, player_id, limit=5):
         return await self._get(f"/players/{player_id}/history", params={"game": "cs2", "offset": 0, "limit": limit})
+        
+    async def get_match_stats(self, match_id):
+        return await self._get(f"/matches/{match_id}/stats")
