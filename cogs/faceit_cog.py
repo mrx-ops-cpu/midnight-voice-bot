@@ -146,6 +146,47 @@ class FaceitCog(commands.Cog):
         await interaction.followup.send(f"✅ Ваш акаунт успішно прив'язано до **{nickname}**!", ephemeral=True)
         await self.update_dashboard()
 
+    @app_commands.command(name="faceit_unlink", description="[АДМІН] Видалити гравця з FaceIT дашборду")
+    @app_commands.describe(user="Користувач Discord, якого треба відв'язати")
+    async def faceit_unlink(self, interaction: discord.Interaction, user: discord.Member):
+        if not interaction.user.guild_permissions.administrator:
+            return await interaction.response.send_message("❌ Тільки адмін може це зробити!", ephemeral=True)
+            
+        await interaction.response.defer(ephemeral=True)
+        users = database.load_faceit_users()
+        uid_str = str(user.id)
+        
+        if uid_str in users:
+            nickname = users.pop(uid_str)
+            database.save_faceit_users(users)
+            await interaction.followup.send(f"✅ Користувача {user.mention} (FaceIT: **{nickname}**) успішно відв'язано!", ephemeral=True)
+            await self.update_dashboard()
+        else:
+            await interaction.followup.send(f"❌ Користувач {user.mention} не має прив'язаного FaceIT акаунта.", ephemeral=True)
+
+    @app_commands.command(name="faceit_remove_nick", description="[АДМІН] Видалити гравця за нікнеймом FaceIT")
+    @app_commands.describe(nickname="Нікнейм на FaceIT")
+    async def faceit_remove_nick(self, interaction: discord.Interaction, nickname: str):
+        if not interaction.user.guild_permissions.administrator:
+            return await interaction.response.send_message("❌ Тільки адмін може це зробити!", ephemeral=True)
+            
+        await interaction.response.defer(ephemeral=True)
+        users = database.load_faceit_users()
+        
+        found_uid = None
+        for uid, nick in users.items():
+            if nick.lower() == nickname.lower():
+                found_uid = uid
+                break
+                
+        if found_uid:
+            del users[found_uid]
+            database.save_faceit_users(users)
+            await interaction.followup.send(f"✅ Нікнейм **{nickname}** успішно видалено з бази!", ephemeral=True)
+            await self.update_dashboard()
+        else:
+            await interaction.followup.send(f"❌ Нікнейм **{nickname}** не знайдено в базі.", ephemeral=True)
+
     @app_commands.command(name="setfaceitchannel", description="[АДМІН] Обрати канал для FaceIT Dashboard")
     @app_commands.describe(channel="Текстовий канал")
     async def setfaceitchannel(self, interaction: discord.Interaction, channel: discord.TextChannel):
@@ -205,7 +246,8 @@ class FaceitCog(commands.Cog):
                     "nickname": nickname,
                     "elo": elo,
                     "level": level,
-                    "stats_data": stats_data
+                    "stats_data": stats_data,
+                    "avatar": player_data.get("avatar", "")
                 })
         
         # Sort top players

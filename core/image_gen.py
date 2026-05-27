@@ -1,19 +1,29 @@
 import os
 import io
 import aiohttp
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
 from io import BytesIO
 
 async def fetch_image(url):
     try:
+        if not url: return None
         async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
+            async with session.get(url, timeout=5) as resp:
                 if resp.status == 200:
                     data = await resp.read()
                     return Image.open(BytesIO(data)).convert("RGBA")
     except:
         pass
     return None
+
+def make_circle_avatar(img, size):
+    img = img.resize(size)
+    mask = Image.new('L', size, 0)
+    draw = ImageDraw.Draw(mask) 
+    draw.ellipse((0, 0) + size, fill=255)
+    output = Image.new('RGBA', size, (0, 0, 0, 0))
+    output.paste(img, (0, 0), mask=mask)
+    return output
 
 def get_font(size, bold=False):
     font_name = "Roboto-Bold.ttf" if bold else "Roboto-Regular.ttf"
@@ -35,95 +45,103 @@ def draw_rounded_rect(draw, coords, radius, fill):
     draw.pieslice([x1-radius*2, y1-radius*2, x1, y1], 0, 90, fill=fill)
 
 def apply_background(width, height):
-    try:
-        bg = Image.open("assets/bg.jpg").convert("RGBA")
-        bg_ratio = bg.width / bg.height
-        target_ratio = width / height
-        if bg_ratio > target_ratio:
-            new_width = int(height * bg_ratio)
-            bg = bg.resize((new_width, height))
-            left = (new_width - width) // 2
-            bg = bg.crop((left, 0, left + width, height))
-        else:
-            new_height = int(width / bg_ratio)
-            bg = bg.resize((width, new_height))
-            top = (new_height - height) // 2
-            bg = bg.crop((0, top, width, top + height))
-            
-        bg = bg.filter(ImageFilter.GaussianBlur(2)) # Мінімум розмиття
-        img = Image.new("RGBA", (width, height))
-        img.paste(bg, (0, 0))
-        overlay = Image.new("RGBA", (width, height), (20, 22, 25, 220)) # Темніший оверлей для стилю фейсіт
-        img.paste(overlay, (0, 0), overlay)
-        return img
-    except:
-        return Image.new("RGBA", (width, height), (25, 27, 31, 255))
+    # Pure FaceIT dark background
+    return Image.new("RGBA", (width, height), (22, 25, 27, 255))
+
+def draw_faceit_level(draw, x, y, size, lvl, font):
+    level_colors = {
+        1: (238, 238, 238), 2: (69, 203, 72), 3: (69, 203, 72),
+        4: (255, 192, 0), 5: (255, 192, 0), 6: (255, 192, 0), 7: (255, 192, 0),
+        8: (255, 110, 0), 9: (255, 110, 0), 10: (211, 44, 38)
+    }
+    color = level_colors.get(lvl, (255,255,255))
+    
+    draw.ellipse([x, y, x+size, y+size], outline=color, width=2)
+    lvl_str = str(lvl)
+    text_bbox = draw.textbbox((0, 0), lvl_str, font=font)
+    text_w = text_bbox[2] - text_bbox[0]
+    text_h = text_bbox[3] - text_bbox[1]
+    
+    draw.text((x + (size - text_w)/2, y + (size - text_h)/2 - 3), lvl_str, fill=color, font=font)
 
 async def generate_dashboard_banner(top_players):
-    """
-    top_players is a list of dicts: nickname, elo, level, stats_data
-    """
-    width, height = 900, 120 + max(1, len(top_players)) * 75
+    row_height = 50
+    header_height = 40
+    width = 900
+    height = header_height + max(1, len(top_players)) * row_height
+    
     img = apply_background(width, height)
     draw = ImageDraw.Draw(img)
 
-    font_title = get_font(36, bold=True)
-    font_text = get_font(24, bold=True)
-    font_small = get_font(18)
-    font_tiny = get_font(14, bold=True)
+    font_header = get_font(14, bold=True)
+    font_text = get_font(16, bold=True)
+    font_small = get_font(14, bold=True)
+    font_tiny = get_font(12, bold=True)
+    font_lvl = get_font(13, bold=True)
 
-    draw.text((40, 30), "FACEIT DASHBOARD", fill=(255, 85, 0), font=font_title) # Колір FaceIT (Помаранчевий)
+    header_color = (113, 118, 122)
     
-    y_offset = 90
+    # Header Row Background
+    draw.rectangle([0, 0, width, header_height], fill=(22, 25, 27, 255))
+    
+    # Header texts
+    draw.text((80, 12), "Player", fill=header_color, font=font_header)
+    draw.text((350, 12), "Rank", fill=header_color, font=font_header)
+    draw.text((550, 12), "K/D", fill=header_color, font=font_header)
+    draw.text((650, 12), "Win %", fill=header_color, font=font_header)
+    draw.text((750, 12), "Recent", fill=header_color, font=font_header)
+    
+    y_offset = header_height
     for i, player in enumerate(top_players):
-        # Плашка гравця (трохи темніша, FaceIT стиль)
-        draw_rounded_rect(draw, [30, y_offset, width-30, y_offset+65], 8, (35, 40, 45, 230))
+        # Alternating row colors
+        bg_color = (33, 36, 40, 255) if i % 2 == 0 else (28, 30, 34, 255)
+        draw.rectangle([0, y_offset, width, y_offset + row_height], fill=bg_color)
         
-        # Місце
-        color_rank = (255, 215, 0) if i == 0 else (192, 192, 192) if i == 1 else (205, 127, 50) if i == 2 else (130, 130, 130)
-        draw.text((45, y_offset + 18), f"#{i+1}", fill=color_rank, font=font_text)
+        # Color bar indicator on left side
+        color_rank = (255, 215, 0) if i == 0 else (192, 192, 192) if i == 1 else (205, 127, 50) if i == 2 else (60, 60, 60)
+        draw.rectangle([0, y_offset, 4, y_offset + row_height], fill=color_rank)
         
-        # Нікнейм
-        draw.text((100, y_offset + 10), player.get("nickname", "Unknown"), fill=(240, 240, 240), font=font_text)
+        draw.text((25, y_offset + 16), f"#{i+1}", fill=color_rank, font=font_small)
         
-        # Статистика (KD, WR) під нікнеймом
+        avatar_img = await fetch_image(player.get("avatar", ""))
+        if avatar_img:
+            avatar = make_circle_avatar(avatar_img, (34, 34))
+            img.paste(avatar, (65, y_offset + 8), avatar)
+            
+        draw.text((110, y_offset + 15), player.get("nickname", "Unknown"), fill=(240, 240, 240), font=font_text)
+        
+        # Rank: Level icon + ELO
+        lvl = player.get("level", 1)
+        draw_faceit_level(draw, 350, y_offset + 12, 26, lvl, font_lvl)
+        draw.text((385, y_offset + 16), f"{player.get('elo', 0)}", fill=(220, 220, 220), font=font_small)
+        
+        # Stats
         stats_data = player.get("stats_data", {})
         lifetime = stats_data.get("lifetime", {}) if stats_data and 'error' not in stats_data else {}
         kd = lifetime.get("Average K/D Ratio", "-")
         wr = lifetime.get("Win Rate %", "-")
-        draw.text((100, y_offset + 40), f"K/D: {kd}  |  Win: {wr}%", fill=(150, 150, 150), font=font_small)
+        
+        # Format WR to match screenshot style (just the number)
+        wr_clean = wr.replace('%', '') if wr != '-' else '-'
+        
+        draw.text((550, y_offset + 16), kd, fill=(220, 220, 220), font=font_small)
+        draw.text((650, y_offset + 16), wr_clean + ("%" if wr_clean != "-" else ""), fill=(220, 220, 220), font=font_small)
 
-        # 5 Останніх матчів
+        # Recent Results
         recent = lifetime.get("Recent Results", [])
-        rx = 350
+        rx = 750
         for res in recent:
             if str(res) == "1":
-                draw_rounded_rect(draw, [rx, y_offset+20, rx+25, y_offset+45], 4, (45, 150, 45, 255))
-                draw.text((rx+6, y_offset+23), "W", fill=(255, 255, 255), font=font_tiny)
+                draw.rectangle([rx, y_offset + 18, rx + 14, y_offset + 32], fill=(45, 150, 45, 255))
+                # Text removed for minimalist faceit style, or kept very small. Let's just use green/red rectangles like faceit does.
             else:
-                draw_rounded_rect(draw, [rx, y_offset+20, rx+25, y_offset+45], 4, (200, 50, 50, 255))
-                draw.text((rx+8, y_offset+23), "L", fill=(255, 255, 255), font=font_tiny)
-            rx += 32
+                draw.rectangle([rx, y_offset + 18, rx + 14, y_offset + 32], fill=(200, 50, 50, 255))
+            rx += 18
 
-        # Рівень FaceIT
-        lvl = player.get("level", 1)
-        level_colors = {
-            1: (238, 238, 238), 2: (69, 203, 72), 3: (69, 203, 72),
-            4: (255, 192, 0), 5: (255, 192, 0), 6: (255, 192, 0), 7: (255, 192, 0),
-            8: (255, 110, 0), 9: (255, 110, 0), 10: (211, 44, 38)
-        }
-        color = level_colors.get(lvl, (255,255,255))
-        draw.ellipse([640, y_offset+18, 670, y_offset+48], fill=color)
-        lvl_offset = 648 if lvl < 10 else 642
-        draw.text((lvl_offset, y_offset + 21), str(lvl), fill=(0, 0, 0), font=font_small)
-        
-        # ELO
-        draw.text((720, y_offset + 18), f"ELO: {player.get('elo', 0)}", fill=(255, 255, 255), font=font_text)
-        
-        y_offset += 75
+        y_offset += row_height
 
     if not top_players:
-        draw.text((40, y_offset), "Немає прив'язаних гравців.", fill=(150, 150, 150), font=font_text)
+        draw.text((40, y_offset + 15), "Немає прив'язаних гравців.", fill=(150, 150, 150), font=font_text)
 
     output = BytesIO()
     img.save(output, format="PNG")
@@ -138,19 +156,26 @@ async def generate_profile_card(nickname, player_data, stats_data, match_stats=N
     font_title = get_font(34, bold=True)
     font_text = get_font(24, bold=True)
     font_small = get_font(18)
-    font_tiny = get_font(14, bold=True)
+    font_lvl = get_font(20, bold=True)
 
     draw.text((30, 25), f"ПРОФІЛЬ: {nickname.upper()}", fill=(255, 85, 0), font=font_title)
+    
+    avatar_img = await fetch_image(player_data.get("avatar", "")) if player_data else None
+    if avatar_img:
+        avatar = make_circle_avatar(avatar_img, (80, 80))
+        img.paste(avatar, (550, 15), avatar)
     
     if player_data and not player_data.get('error'):
         games = player_data.get("games", {})
         cs2 = games.get("cs2", {})
         elo = cs2.get("faceit_elo", "N/A")
-        lvl = cs2.get("skill_level", "N/A")
+        lvl = cs2.get("skill_level", 1)
         
-        draw_rounded_rect(draw, [30, 80, 670, 180], 8, (35, 40, 45, 230))
-        draw.text((50, 100), f"Level: {lvl}", fill=(255, 255, 255), font=font_text)
-        draw.text((250, 100), f"ELO: {elo}", fill=(255, 85, 0), font=font_text)
+        draw.rectangle([30, 80, 670, 180], fill=(33, 36, 40, 255))
+        draw_faceit_level(draw, 50, 110, 40, lvl, font_lvl)
+        draw.text((100, 115), "Level", fill=(150, 150, 150), font=font_small)
+        
+        draw.text((250, 115), f"ELO: {elo}", fill=(255, 85, 0), font=font_text)
     else:
         draw.text((30, 80), "Гравець не знайдений.", fill=(255, 50, 50), font=font_text)
 
@@ -166,18 +191,16 @@ async def generate_profile_card(nickname, player_data, stats_data, match_stats=N
         draw.text((450, 140), f"Матчів: {matches}", fill=(200, 200, 200), font=font_small)
         
         draw.text((30, 200), "Останні ігри:", fill=(150, 150, 150), font=font_small)
-        x_offset = 180
+        rx = 180
         for res in recent:
             if str(res) == "1":
-                draw_rounded_rect(draw, [x_offset, 195, x_offset+30, 225], 4, (45, 150, 45, 255))
-                draw.text((x_offset+8, 200), "W", fill=(255, 255, 255), font=font_tiny)
+                draw.rectangle([rx, 195, rx+25, 220], fill=(45, 150, 45, 255))
             else:
-                draw_rounded_rect(draw, [x_offset, 195, x_offset+30, 225], 4, (200, 50, 50, 255))
-                draw.text((x_offset+10, 200), "L", fill=(255, 255, 255), font=font_tiny)
-            x_offset += 40
+                draw.rectangle([rx, 195, rx+25, 220], fill=(200, 50, 50, 255))
+            rx += 30
 
     if match_stats:
-        draw_rounded_rect(draw, [30, 250, 670, 350], 8, (35, 40, 45, 230))
+        draw.rectangle([30, 250, 670, 350], fill=(33, 36, 40, 255))
         draw.text((50, 265), "ОСТАННІЙ МАТЧ", fill=(255, 85, 0), font=font_small)
         draw.text((50, 300), match_stats, fill=(200, 200, 200), font=font_small)
 
@@ -197,11 +220,17 @@ async def generate_compare_card(nickname1, p1_data, p1_stats, nickname2, p2_data
 
     draw.text((30, 20), "ПОРІВНЯННЯ", fill=(255, 85, 0), font=font_title)
     
-    # Headers
-    draw.text((250, 80), nickname1.upper(), fill=(255, 255, 255), font=font_text)
-    draw.text((500, 80), nickname2.upper(), fill=(255, 255, 255), font=font_text)
+    draw.text((150, 80), nickname1.upper(), fill=(255, 255, 255), font=font_text)
+    draw.text((450, 80), nickname2.upper(), fill=(255, 255, 255), font=font_text)
     
-    # Helper to compare
+    av1 = await fetch_image(p1_data.get("avatar", "")) if p1_data else None
+    av2 = await fetch_image(p2_data.get("avatar", "")) if p2_data else None
+    
+    if av1:
+        img.paste(make_circle_avatar(av1, (40, 40)), (100, 75), make_circle_avatar(av1, (40, 40)))
+    if av2:
+        img.paste(make_circle_avatar(av2, (40, 40)), (400, 75), make_circle_avatar(av2, (40, 40)))
+
     def draw_stat(y, label, val1_str, val2_str, reverse=False):
         draw.text((30, y), label, fill=(150, 150, 150), font=font_small)
         try:
@@ -212,10 +241,9 @@ async def generate_compare_card(nickname1, p1_data, p1_stats, nickname2, p2_data
         except:
             c1 = c2 = (200, 200, 200)
             
-        draw.text((250, y), str(val1_str), fill=c1, font=font_text)
-        draw.text((500, y), str(val2_str), fill=c2, font=font_text)
+        draw.text((150, y), str(val1_str), fill=c1, font=font_text)
+        draw.text((450, y), str(val2_str), fill=c2, font=font_text)
 
-    # Get data
     e1 = p1_data.get("games", {}).get("cs2", {}).get("faceit_elo", 0) if p1_data else 0
     e2 = p2_data.get("games", {}).get("cs2", {}).get("faceit_elo", 0) if p2_data else 0
     
@@ -228,12 +256,12 @@ async def generate_compare_card(nickname1, p1_data, p1_stats, nickname2, p2_data
     m1 = p1_stats.get("lifetime", {}).get("Matches", "0") if p1_stats else "0"
     m2 = p2_stats.get("lifetime", {}).get("Matches", "0") if p2_stats else "0"
 
-    draw_rounded_rect(draw, [20, 120, 680, 360], 8, (35, 40, 45, 230))
+    draw.rectangle([20, 130, 680, 370], fill=(33, 36, 40, 255))
 
-    draw_stat(140, "ELO", str(e1), str(e2))
-    draw_stat(190, "K/D RATIO", str(kd1), str(kd2))
-    draw_stat(240, "ВІНРЕЙТ (%)", str(wr1), str(wr2))
-    draw_stat(290, "МАТЧІВ", str(m1), str(m2))
+    draw_stat(150, "ELO", str(e1), str(e2))
+    draw_stat(200, "K/D RATIO", str(kd1), str(kd2))
+    draw_stat(250, "ВІНРЕЙТ (%)", str(wr1), str(wr2))
+    draw_stat(300, "МАТЧІВ", str(m1), str(m2))
 
     output = BytesIO()
     img.save(output, format="PNG")
