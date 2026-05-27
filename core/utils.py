@@ -256,10 +256,12 @@ async def update_fame_message(guild, bot):
     top_games_data = []
     
     game_icons = {
+        "counter-strike 2": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/730/69f7ebe2735c366c65c0b33dae00e12dc40edbe4.jpg",
         "cs2": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/730/69f7ebe2735c366c65c0b33dae00e12dc40edbe4.jpg",
         "dota 2": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/570/0b00f1c1bad8a0699bc22bc9ed6f93d3950b73c4.jpg",
         "gta v": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/271590/1e72f87eb927fa1485e68aefaff23c7fd7178051.jpg",
         "rust": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/252490/4dfb2d6ffbb495d4f10738e4aee4a706da62828e.jpg",
+        "pubg: battlegrounds": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/578080/2d49cfbb32c0201d810ba2d1ba704d2bfb2ca617.jpg",
         "pubg": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/578080/2d49cfbb32c0201d810ba2d1ba704d2bfb2ca617.jpg"
     }
 
