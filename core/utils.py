@@ -252,7 +252,7 @@ async def update_fame_message(guild, bot):
         top_streaks_data.append({"name": name, "streak": f"{streak_count} днів підряд", "avatar_url": avatar})
 
     # --- GAMES DATA ---
-    top_games = database.get_top_games(limit_games=5, limit_players=2)
+    top_games = database.get_top_games(limit_games=10, limit_players=2)
     top_games_data = []
     
     game_icons = {
