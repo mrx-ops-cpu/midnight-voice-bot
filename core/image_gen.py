@@ -550,9 +550,9 @@ async def generate_streaks_image(top_streaks_data):
 
 async def generate_games_image(top_games_data):
     width = 1600
-    game_header_height = 100
-    player_row_height = 85
-    header_height = 80
+    game_header_height = 80
+    player_row_height = 70
+    header_height = 70
     
     total_h = header_height
     for g in top_games_data:
