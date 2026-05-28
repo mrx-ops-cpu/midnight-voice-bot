@@ -751,8 +751,10 @@ async def generate_games_image(top_games_data, offset=0, show_header=True):
                                   radial-gradient(circle at 90% 80%, rgba(150, 30, 20, 0.6) 0%, transparent 40%);
                 font-family: 'Inter', sans-serif; color: white; padding: 30px; width: 580px; margin: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased;
             }}
-            .header {{ text-align: center; font-size: 22px; font-weight: 800; color: #ff9a85; text-shadow: 0 0 15px rgba(255, 60, 0, 0.8); margin-bottom: 25px; text-transform: uppercase; }}
-            .card {{ background: rgba(30, 32, 38, 0.6); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; display: flex; align-items: center; backdrop-filter: blur(10px); box-shadow: 0 4px 15px rgba(0,0,0,0.4); }}
+            .container {{ padding: 24px; display: flex; flex-direction: column; gap: 16px; width: 500px; box-sizing: border-box; }}
+            .header {{ text-align: center; color: #ff7666; font-size: 24px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; filter: drop-shadow(0 0 10px rgba(255, 118, 102, 0.4)); }}
+            .card {{ background: linear-gradient(145deg, rgba(30, 20, 20, 0.9), rgba(15, 10, 10, 0.95)); border-radius: 16px; padding: 18px; display: flex; align-items: stretch; position: relative; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid rgba(255, 118, 102, 0.15); }}
+            .card::before {{ content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255, 118, 102, 0.4), transparent); }}
             .shield-container {{ width: 44px; height: 50px; position: relative; display: flex; justify-content: center; align-items: center; margin-right: 16px; flex-shrink: 0; }}
             .shield-svg {{ position: absolute; width: 100%; height: 100%; top: 0; left: 0; }}
             .rank-text {{ font-size: 16px; font-weight: 700; z-index: 2; margin-top: -2px; }}
@@ -775,8 +777,10 @@ async def generate_games_image(top_games_data, offset=0, show_header=True):
         </style>
     </head>
     <body>
-        {header_html}
-        {cards_html}
+        <div class="container">
+            {header_html}
+            {cards_html}
+        </div>
     </body>
     </html>
     '''
