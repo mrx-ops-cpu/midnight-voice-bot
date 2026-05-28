@@ -319,8 +319,8 @@ async def update_fame_message(guild, bot):
             s_img = await image_gen.generate_streaks_image(top_streaks_data)
             streaks_file = discord.File(s_img, filename="fame_streaks.png")
             
-            games_part1 = top_games_data[:3]
-            games_part2 = top_games_data[3:6]
+            games_part1 = top_games_data[:4]
+            games_part2 = top_games_data[4:8]
             
             g1_img = await image_gen.generate_games_image(games_part1, offset=0, show_header=True)
             games_file1 = discord.File(g1_img, filename="fame_games_1.png")

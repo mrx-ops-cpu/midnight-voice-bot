@@ -555,7 +555,7 @@ async def generate_voice_image(top_voice_data):
         c_class = min(rank, 3)
         
         cards_html += f'''
-        <div class="card">
+        <div class="card card-{c_class}">
             <div class="shield-container outline-{c_class}">
                 <svg class="shield-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
@@ -581,9 +581,9 @@ async def generate_voice_image(top_voice_data):
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
             body {{
                 background-color: #08070d;
-                background-image: radial-gradient(circle at 20% 40%, rgba(90, 40, 150, 0.4) 0%, transparent 50%),
-                                  radial-gradient(circle at 80% 60%, rgba(40, 120, 150, 0.4) 0%, transparent 50%);
-                font-family: 'Inter', sans-serif; color: white; padding: 30px; width: 600px; margin: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased;
+                background-image: radial-gradient(circle at 20% 40%, rgba(130, 60, 200, 0.7) 0%, transparent 60%),
+                                  radial-gradient(circle at 80% 60%, rgba(60, 160, 200, 0.6) 0%, transparent 60%);
+                font-family: 'Inter', sans-serif; color: white; padding: 30px; width: 800px; margin: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased;
             }}
             .header {{ text-align: center; font-size: 26px; font-weight: 900; color: #a461f5; text-shadow: 0 0 15px rgba(164, 97, 245, 0.8); margin-bottom: 25px; text-transform: uppercase; }}
             .container {{ background: rgba(24, 25, 28, 0.4); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 14px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }}
@@ -592,9 +592,12 @@ async def generate_voice_image(top_voice_data):
             .voice-btn {{ background: rgba(30, 80, 40, 0.2); border: 1px solid rgba(60, 150, 60, 0.4); color: #4ade80; padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 800; display: flex; align-items: center; gap: 6px; text-shadow: 0 0 8px rgba(74, 222, 128, 0.4); }}
             .card {{ background: rgba(30, 32, 38, 0.6); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px; padding: 12px 18px; margin-bottom: 12px; display: flex; align-items: center; position: relative; backdrop-filter: blur(10px); }}
             .card:last-child {{ margin-bottom: 0; }}
+            .card-1 {{ border: 2px solid #f6a125; box-shadow: 0 0 15px rgba(246,161,37,0.4), inset 0 0 10px rgba(246,161,37,0.2); background: rgba(45, 35, 25, 0.8); }}
+            .card-2 {{ border: 2px solid #57a6e5; box-shadow: 0 0 15px rgba(87,166,229,0.4), inset 0 0 10px rgba(87,166,229,0.2); background: rgba(25, 35, 45, 0.8); }}
+            .card-3 {{ border: 2px solid #e55757; box-shadow: 0 0 15px rgba(229,87,87,0.4), inset 0 0 10px rgba(229,87,87,0.2); background: rgba(45, 25, 25, 0.8); }}
             .shield-container {{ width: 38px; height: 44px; position: relative; display: flex; justify-content: center; align-items: center; margin-right: 18px; flex-shrink: 0; }}
             .shield-svg {{ position: absolute; width: 100%; height: 100%; top: 0; left: 0; }}
-            .rank-text {{ font-size: 14px; font-weight: 800; z-index: 2; }}
+            .rank-text {{ font-size: 14px; font-weight: 800; z-index: 2; margin-top: -2px; }}
             .avatar-container {{ width: 48px; height: 48px; border-radius: 50%; position: relative; margin-right: 18px; flex-shrink: 0; border: 2px solid rgba(255,255,255,0.1); }}
             .avatar-img {{ width: 100%; height: 100%; border-radius: 50%; background-size: cover; background-position: center; }}
             .player-info {{ flex: 1; display: flex; justify-content: space-between; align-items: center; }}
@@ -657,7 +660,7 @@ async def generate_streaks_image(top_streaks_data):
             body {{
                 background-color: #0d0a0a;
                 background-image: radial-gradient(circle at center, rgba(150, 40, 0, 0.4) 0%, transparent 60%);
-                font-family: 'Inter', sans-serif; color: white; padding: 30px; width: 600px; margin: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased;
+                font-family: 'Inter', sans-serif; color: white; padding: 30px; width: 800px; margin: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased;
             }}
             .header {{ text-align: center; font-size: 26px; font-weight: 900; color: #ff9a44; text-shadow: 0 0 15px rgba(255, 120, 0, 0.8); margin-bottom: 25px; text-transform: uppercase; }}
             .container {{ background: rgba(24, 25, 28, 0.4); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 14px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }}
@@ -703,7 +706,10 @@ async def generate_games_image(top_games_data, offset=0, show_header=True):
         g_name = g.get('name', 'Unknown')
         g_time = g.get('time', '0 h')
         g_icon = g.get('icon_url', '') or 'https://via.placeholder.com/56x56/2a2a2a/2a2a2a'
-        c_class = min(rank, 5)
+        c_class = 'default'
+        if rank == 1: c_class = '1'
+        elif rank == 2: c_class = '2'
+        elif rank == 3: c_class = '3'
         
         players_html = ""
         for pl in g.get('players', []):
@@ -719,7 +725,7 @@ async def generate_games_image(top_games_data, offset=0, show_header=True):
             '''
 
         cards_html += f'''
-        <div class="card">
+        <div class="card card-{c_class}">
             <div class="shield-container rank-{c_class}">
                 <svg class="shield-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
@@ -749,12 +755,16 @@ async def generate_games_image(top_games_data, offset=0, show_header=True):
                 background-color: #0f0a0a;
                 background-image: radial-gradient(circle at 10% 50%, rgba(100, 20, 20, 0.8) 0%, transparent 50%),
                                   radial-gradient(circle at 90% 80%, rgba(150, 30, 20, 0.6) 0%, transparent 40%);
-                font-family: 'Inter', sans-serif; color: white; padding: 30px; width: 600px; margin: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased;
+                font-family: 'Inter', sans-serif; color: white; padding: 30px; width: 800px; margin: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased;
             }}
             .container {{ padding: 24px; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box; }}
             .header {{ text-align: center; color: #ff7666; font-size: 26px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; filter: drop-shadow(0 0 10px rgba(255, 118, 102, 0.4)); }}
-            .card {{ background: linear-gradient(145deg, rgba(30, 20, 20, 0.9), rgba(15, 10, 10, 0.95)); border-radius: 18px; padding: 22px; display: flex; align-items: stretch; position: relative; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid rgba(255, 118, 102, 0.15); margin-bottom: 20px; }}
-            .card:last-child {{ margin-bottom: 0; }}
+            .card { background: linear-gradient(145deg, rgba(30, 20, 20, 0.9), rgba(15, 10, 10, 0.95)); border-radius: 18px; padding: 22px; display: flex; align-items: stretch; position: relative; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid rgba(255, 118, 102, 0.15); margin-bottom: 20px; }
+            .card:last-child { margin-bottom: 0; }
+            .card-1 { border: 2px solid #f6a125; box-shadow: 0 0 15px rgba(246,161,37,0.4), inset 0 0 10px rgba(246,161,37,0.2); }
+            .card-2 { border: 2px solid #57a6e5; box-shadow: 0 0 15px rgba(87,166,229,0.4), inset 0 0 10px rgba(87,166,229,0.2); }
+            .card-3 { border: 2px solid #e55757; box-shadow: 0 0 15px rgba(229,87,87,0.4), inset 0 0 10px rgba(229,87,87,0.2); }
+            .card-default { border: 1px solid rgba(255, 118, 102, 0.15); }
             .card::before {{ content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255, 118, 102, 0.4), transparent); }}
             .shield-container {{ width: 50px; height: 56px; position: relative; display: flex; justify-content: center; align-items: center; margin-right: 20px; flex-shrink: 0; }}
             .shield-svg {{ position: absolute; width: 100%; height: 100%; top: 0; left: 0; }}
