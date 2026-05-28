@@ -1,5 +1,5 @@
 [phases.setup]
 nixPkgs = ["...", "ffmpeg", "chromium"]
 
-[phases.postInstall]
-cmds = ["playwright install chromium"]
+[phases.install]
+cmds = ["...", "playwright install chromium"]

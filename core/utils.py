@@ -233,133 +233,151 @@ async def get_user_avatar(uid, guild, bot):
     return ""
 
 async def update_fame_message(guild, bot):
-    from core import image_gen
-    monitor_id = database.load_monitor_channel() or config.GAMING_MONITOR_ID
-    ch = bot.get_channel(monitor_id)
-    if not ch: return
-    
-    s = database.load_stats()
-    
-    # --- VOICE DATA ---
-    total = dict(s.get("total", {}))
-    for uid, start in config.voice_start_times.items():
-        k = str(uid)
-        last_save = config.voice_last_save.get(uid, start)
-        try:
-            total[k] = float(total.get(k, 0)) + (datetime.now().timestamp() - float(last_save))
-        except: pass
+    try:
+        from core import image_gen
+        import traceback
+        monitor_id = database.load_monitor_channel() or config.GAMING_MONITOR_ID
+        ch = bot.get_channel(monitor_id)
+        if not ch: return
         
-    top3_voice = sorted(total.items(), key=lambda x: float(x[1]) if isinstance(x[1], (int, float)) else 0, reverse=True)[:3]
-    top_voice_data = []
-    for uid, sec in top3_voice:
-        name = database.get_display_name(uid, guild, bot)
-        avatar = await get_user_avatar(uid, guild, bot)
-        top_voice_data.append({"name": name, "time": format_time(sec), "avatar_url": avatar})
-
-    # --- STREAKS DATA ---
-    voice_streaks_data = s.get("streaks", {})
-    active_streaks = {}
-    for uid_str, entry in voice_streaks_data.items():
-        streak = database.get_streak(uid_str)
-        if streak > 0:
-            active_streaks[uid_str] = streak
-
-    top3_streaks = sorted(active_streaks.items(), key=lambda x: x[1], reverse=True)[:3]
-    top_streaks_data = []
-    for uid_str, streak_count in top3_streaks:
-        name = database.get_display_name(uid_str, guild, bot)
-        avatar = await get_user_avatar(uid_str, guild, bot)
-        top_streaks_data.append({"name": name, "streak": f"{streak_count} днів підряд", "avatar_url": avatar})
-
-    # --- GAMES DATA ---
-    top_games = database.get_top_games(limit_games=10, limit_players=2)
-    top_games_data = []
-    
-    game_icons = {
-        "counter-strike 2": "https://cdn.akamai.steamstatic.com/steam/apps/730/header.jpg",
-        "cs2": "https://cdn.akamai.steamstatic.com/steam/apps/730/header.jpg",
-        "dota 2": "https://cdn.akamai.steamstatic.com/steam/apps/570/header.jpg",
-        "gta v": "https://cdn.akamai.steamstatic.com/steam/apps/271590/header.jpg",
-        "majestic rp": "https://cdn.akamai.steamstatic.com/steam/apps/271590/header.jpg",
-        "rust": "https://cdn.akamai.steamstatic.com/steam/apps/252490/header.jpg",
-        "pubg: battlegrounds": "https://cdn.akamai.steamstatic.com/steam/apps/578080/header.jpg",
-        "pubg": "https://cdn.akamai.steamstatic.com/steam/apps/578080/header.jpg",
-        "arena breakout: infinite": "https://cdn.akamai.steamstatic.com/steam/apps/2073620/header.jpg",
-        "forza horizon 6": "https://cdn.akamai.steamstatic.com/steam/apps/1551360/header.jpg",
-        "forza horizon 5": "https://cdn.akamai.steamstatic.com/steam/apps/1551360/header.jpg",
-        "visual studio code": "https://raw.githubusercontent.com/microsoft/vscode/main/resources/win32/code_150x150.png",
-        "outplayed": "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/1f3ae.png",
-        "arizona role play": "https://cdn.akamai.steamstatic.com/steam/apps/12120/header.jpg",
-        "gta san andreas": "https://cdn.akamai.steamstatic.com/steam/apps/12120/header.jpg"
-    }
-
-    if top_games:
-        for game, data in top_games.items():
-            icon_url = game_icons.get(game.lower(), "")
-            players_list = []
-            for p_uid, p_sec in data["players"]:
-                p_name = database.get_display_name(p_uid, guild, bot)
-                p_avatar = await get_user_avatar(p_uid, guild, bot)
-                players_list.append({"name": p_name, "time": format_time(p_sec), "avatar_url": p_avatar})
-            
-            top_games_data.append({
-                "name": game,
-                "time": format_time(data['total']),
-                "icon_url": icon_url,
-                "players": players_list
-            })
-
-    # Generate images
-    voice_file = discord.File(await image_gen.generate_voice_image(top_voice_data), filename="fame_voice.png")
-    streaks_file = discord.File(await image_gen.generate_streaks_image(top_streaks_data), filename="fame_streaks.png")
-    
-    games_part1 = top_games_data[:4]
-    games_part2 = top_games_data[4:8]
-    
-    games_file1 = discord.File(await image_gen.generate_games_image(games_part1, offset=0, show_header=True), filename="fame_games_1.png")
-    games_file2 = None
-    if games_part2:
-        games_file2 = discord.File(await image_gen.generate_games_image(games_part2, offset=4, show_header=False), filename="fame_games_2.png")
-
-    # Hashes (serialize data dicts to check for changes)
-    def hash_data(d): return hashlib.md5(json.dumps(d, sort_keys=True).encode('utf-8')).hexdigest()
-    
-    current_voice_hash = hash_data(top_voice_data)
-    current_streaks_hash = hash_data(top_streaks_data)
-    current_games1_hash = hash_data(games_part1)
-    current_games2_hash = hash_data(games_part2) if games_part2 else None
-    
-    async def update_msg(msg_id_attr, hash_attr, current_hash, file_obj):
-        if not file_obj or not current_hash: return None
-        saved_hash = getattr(config, hash_attr, None)
-        msg_id = getattr(config, msg_id_attr, None)
+        s = database.load_stats()
         
-        if saved_hash == current_hash and msg_id:
-            return msg_id # No change needed
-            
-        if msg_id:
+        # --- VOICE DATA ---
+        total = dict(s.get("total", {}))
+        for uid, start in config.voice_start_times.items():
+            k = str(uid)
+            last_save = config.voice_last_save.get(uid, start)
             try:
-                msg = await ch.fetch_message(msg_id)
-                await msg.edit(attachments=[file_obj], embed=None)
-                setattr(config, hash_attr, current_hash)
-                return msg_id
-            except discord.NotFound:
-                setattr(config, msg_id_attr, None)
-                
-        # Send new
-        msg = await ch.send(file=file_obj)
-        setattr(config, hash_attr, current_hash)
-        return msg.id
+                total[k] = float(total.get(k, 0)) + (datetime.now().timestamp() - float(last_save))
+            except: pass
+            
+        top3_voice = sorted(total.items(), key=lambda x: float(x[1]) if isinstance(x[1], (int, float)) else 0, reverse=True)[:3]
+        top_voice_data = []
+        for uid, sec in top3_voice:
+            name = database.get_display_name(uid, guild, bot)
+            avatar = await get_user_avatar(uid, guild, bot)
+            top_voice_data.append({"name": name, "time": format_time(sec), "avatar_url": avatar})
 
-    # Update messages in requested order: Voice, Streaks, Games
-    config.fame_voice_msg_id = await update_msg('fame_voice_msg_id', 'last_fame_voice_hash', current_voice_hash, voice_file)
-    config.fame_streaks_msg_id = await update_msg('fame_streaks_msg_id', 'last_fame_streaks_hash', current_streaks_hash, streaks_file)
-    config.fame_games_msg_id = await update_msg('fame_games_msg_id', 'last_fame_games_hash', current_games1_hash, games_file1)
-    
-    if games_part2:
-        config.fame_games_2_msg_id = await update_msg('fame_games_2_msg_id', 'last_fame_games_2_hash', current_games2_hash, games_file2)
-    
-    database.save_message_ids()
+        # --- STREAKS DATA ---
+        voice_streaks_data = s.get("streaks", {})
+        active_streaks = {}
+        for uid_str, entry in voice_streaks_data.items():
+            streak = database.get_streak(uid_str)
+            if streak > 0:
+                active_streaks[uid_str] = streak
+
+        top3_streaks = sorted(active_streaks.items(), key=lambda x: x[1], reverse=True)[:3]
+        top_streaks_data = []
+        for uid_str, streak_count in top3_streaks:
+            name = database.get_display_name(uid_str, guild, bot)
+            avatar = await get_user_avatar(uid_str, guild, bot)
+            top_streaks_data.append({"name": name, "streak": f"{streak_count} днів підряд", "avatar_url": avatar})
+
+        # --- GAMES DATA ---
+        top_games = database.get_top_games(limit_games=10, limit_players=2)
+        top_games_data = []
+        
+        game_icons = {
+            "counter-strike 2": "https://cdn.akamai.steamstatic.com/steam/apps/730/header.jpg",
+            "cs2": "https://cdn.akamai.steamstatic.com/steam/apps/730/header.jpg",
+            "dota 2": "https://cdn.akamai.steamstatic.com/steam/apps/570/header.jpg",
+            "gta v": "https://cdn.akamai.steamstatic.com/steam/apps/271590/header.jpg",
+            "majestic rp": "https://cdn.akamai.steamstatic.com/steam/apps/271590/header.jpg",
+            "rust": "https://cdn.akamai.steamstatic.com/steam/apps/252490/header.jpg",
+            "pubg: battlegrounds": "https://cdn.akamai.steamstatic.com/steam/apps/578080/header.jpg",
+            "pubg": "https://cdn.akamai.steamstatic.com/steam/apps/578080/header.jpg",
+            "arena breakout: infinite": "https://cdn.akamai.steamstatic.com/steam/apps/2073620/header.jpg",
+            "forza horizon 6": "https://cdn.akamai.steamstatic.com/steam/apps/1551360/header.jpg",
+            "forza horizon 5": "https://cdn.akamai.steamstatic.com/steam/apps/1551360/header.jpg",
+            "visual studio code": "https://raw.githubusercontent.com/microsoft/vscode/main/resources/win32/code_150x150.png",
+            "outplayed": "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/1f3ae.png",
+            "arizona role play": "https://cdn.akamai.steamstatic.com/steam/apps/12120/header.jpg",
+            "gta san andreas": "https://cdn.akamai.steamstatic.com/steam/apps/12120/header.jpg"
+        }
+
+        if top_games:
+            for game, data in top_games.items():
+                icon_url = game_icons.get(game.lower(), "")
+                players_list = []
+                for p_uid, p_sec in data["players"]:
+                    p_name = database.get_display_name(p_uid, guild, bot)
+                    p_avatar = await get_user_avatar(p_uid, guild, bot)
+                    players_list.append({"name": p_name, "time": format_time(p_sec), "avatar_url": p_avatar})
+                
+                top_games_data.append({
+                    "name": game,
+                    "time": format_time(data['total']),
+                    "icon_url": icon_url,
+                    "players": players_list
+                })
+
+        # Generate images
+        try:
+            v_img = await image_gen.generate_voice_image(top_voice_data)
+            voice_file = discord.File(v_img, filename="fame_voice.png")
+            
+            s_img = await image_gen.generate_streaks_image(top_streaks_data)
+            streaks_file = discord.File(s_img, filename="fame_streaks.png")
+            
+            games_part1 = top_games_data[:4]
+            games_part2 = top_games_data[4:8]
+            
+            g1_img = await image_gen.generate_games_image(games_part1, offset=0, show_header=True)
+            games_file1 = discord.File(g1_img, filename="fame_games_1.png")
+            
+            games_file2 = None
+            if games_part2:
+                g2_img = await image_gen.generate_games_image(games_part2, offset=4, show_header=False)
+                games_file2 = discord.File(g2_img, filename="fame_games_2.png")
+        except Exception as e:
+            await ch.send(f"❌ Помилка малювання картинок: `{str(e)}`\n```{traceback.format_exc()[:1800]}```")
+            return
+
+        # Hashes (serialize data dicts to check for changes)
+        def hash_data(d): return hashlib.md5(json.dumps(d, sort_keys=True).encode('utf-8')).hexdigest()
+        
+        current_voice_hash = hash_data(top_voice_data)
+        current_streaks_hash = hash_data(top_streaks_data)
+        current_games1_hash = hash_data(games_part1)
+        current_games2_hash = hash_data(games_part2) if games_part2 else None
+        
+        async def update_msg(msg_id_attr, hash_attr, current_hash, file_obj):
+            if not file_obj or not current_hash: return None
+            saved_hash = getattr(config, hash_attr, None)
+            msg_id = getattr(config, msg_id_attr, None)
+            
+            if saved_hash == current_hash and msg_id:
+                return msg_id # No change needed
+                
+            if msg_id:
+                try:
+                    msg = await ch.fetch_message(msg_id)
+                    await msg.edit(attachments=[file_obj], embed=None)
+                    setattr(config, hash_attr, current_hash)
+                    return msg_id
+                except discord.NotFound:
+                    setattr(config, msg_id_attr, None)
+                    
+            # Send new
+            msg = await ch.send(file=file_obj)
+            setattr(config, hash_attr, current_hash)
+            return msg.id
+
+        # Update messages in requested order: Voice, Streaks, Games
+        config.fame_voice_msg_id = await update_msg('fame_voice_msg_id', 'last_fame_voice_hash', current_voice_hash, voice_file)
+        config.fame_streaks_msg_id = await update_msg('fame_streaks_msg_id', 'last_fame_streaks_hash', current_streaks_hash, streaks_file)
+        config.fame_games_msg_id = await update_msg('fame_games_msg_id', 'last_fame_games_hash', current_games1_hash, games_file1)
+        
+        if games_part2:
+            config.fame_games_2_msg_id = await update_msg('fame_games_2_msg_id', 'last_fame_games_2_hash', current_games2_hash, games_file2)
+        
+        database.save_message_ids()
+    except Exception as e:
+        import traceback
+        monitor_id = database.load_monitor_channel() or config.GAMING_MONITOR_ID
+        ch = bot.get_channel(monitor_id)
+        if ch:
+            await ch.send(f"❌ Критична помилка в update_fame_message:\n```{traceback.format_exc()[:1800]}```")
 
 async def update_live_message(guild, bot):
     monitor_id = database.load_monitor_channel() or config.GAMING_MONITOR_ID
