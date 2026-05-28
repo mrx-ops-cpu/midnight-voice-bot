@@ -13,7 +13,7 @@ async def fetch_image(url):
     try:
         if not url: return None
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=5) as resp:
+            async with session.get(url, timeout=5, headers={"User-Agent": "Mozilla/5.0"}) as resp:
                 if resp.status == 200:
                     data = await resp.read()
                     return Image.open(BytesIO(data)).convert("RGBA")
@@ -593,10 +593,10 @@ async def generate_games_image(top_games_data, offset=0, show_header=True):
         draw.rectangle([0, y, width, y + game_header_height], fill=(42, 47, 52, 255))
         
         rank_idx = i + offset
-        color_rank = medal_colors[rank_idx] if rank_idx < 3 else (80, 80, 80)
+        color_rank = medal_colors[rank_idx] if rank_idx < 3 else (200, 200, 200)
         draw.rectangle([0, y, 8, y + game_header_height], fill=color_rank)
         
-        draw.text((40, y + 20), f"#{rank_idx+1}", fill=color_rank, font=font_rank_small)
+        draw.text((20, y + 20), f"#{rank_idx+1}", fill=color_rank, font=font_rank_small)
         
         icon_url = g.get("icon_url", "")
         icon_x = 90

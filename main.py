@@ -147,7 +147,7 @@ async def on_ready():
         for channel in guild.voice_channels:
             for member in channel.members:
                 if member.bot: continue
-                config.voice_start_times[member.id] = saved_vs.get(str(member.id), datetime.now().timestamp())
+                config.voice_start_times[member.id] = saved_vs.get(member.id, datetime.now().timestamp())
                 config.voice_last_save[member.id] = datetime.now().timestamp()
 
     now = datetime.now().timestamp()
