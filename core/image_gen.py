@@ -523,8 +523,14 @@ def _draw_header_glow(draw, img, text, x, y, font, emoji_img=None, emoji_size=60
 
 async def render_html_to_image(html_content, width=600):
     from io import BytesIO
+    import shutil
     async with async_playwright() as p:
-        browser = await p.chromium.launch()
+        executable_path = shutil.which("chromium") or shutil.which("google-chrome") or shutil.which("chromium-browser")
+        launch_args = {"args": ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]}
+        if executable_path:
+            launch_args["executable_path"] = executable_path
+            
+        browser = await p.chromium.launch(**launch_args)
         # Scale 2.0 for high resolution rendering
         page = await browser.new_page(device_scale_factor=2.0)
         await page.set_content(html_content)
