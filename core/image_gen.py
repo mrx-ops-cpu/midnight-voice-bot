@@ -759,12 +759,12 @@ async def generate_games_image(top_games_data, offset=0, show_header=True):
             }}
             .container {{ padding: 24px; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box; }}
             .header {{ text-align: center; color: #ff7666; font-size: 26px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; filter: drop-shadow(0 0 10px rgba(255, 118, 102, 0.4)); }}
-            .card { background: linear-gradient(145deg, rgba(30, 20, 20, 0.9), rgba(15, 10, 10, 0.95)); border-radius: 18px; padding: 22px; display: flex; align-items: stretch; position: relative; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid rgba(255, 118, 102, 0.15); margin-bottom: 20px; }
-            .card:last-child { margin-bottom: 0; }
-            .card-1 { border: 2px solid #f6a125; box-shadow: 0 0 15px rgba(246,161,37,0.4), inset 0 0 10px rgba(246,161,37,0.2); }
-            .card-2 { border: 2px solid #57a6e5; box-shadow: 0 0 15px rgba(87,166,229,0.4), inset 0 0 10px rgba(87,166,229,0.2); }
-            .card-3 { border: 2px solid #e55757; box-shadow: 0 0 15px rgba(229,87,87,0.4), inset 0 0 10px rgba(229,87,87,0.2); }
-            .card-default { border: 1px solid rgba(255, 118, 102, 0.15); }
+            .card {{ background: linear-gradient(145deg, rgba(30, 20, 20, 0.9), rgba(15, 10, 10, 0.95)); border-radius: 18px; padding: 22px; display: flex; align-items: stretch; position: relative; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid rgba(255, 118, 102, 0.15); margin-bottom: 20px; }}
+            .card:last-child {{ margin-bottom: 0; }}
+            .card-1 {{ border: 2px solid #f6a125; box-shadow: 0 0 15px rgba(246,161,37,0.4), inset 0 0 10px rgba(246,161,37,0.2); }}
+            .card-2 {{ border: 2px solid #57a6e5; box-shadow: 0 0 15px rgba(87,166,229,0.4), inset 0 0 10px rgba(87,166,229,0.2); }}
+            .card-3 {{ border: 2px solid #e55757; box-shadow: 0 0 15px rgba(229,87,87,0.4), inset 0 0 10px rgba(229,87,87,0.2); }}
+            .card-default {{ border: 1px solid rgba(255, 118, 102, 0.15); }}
             .card::before {{ content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255, 118, 102, 0.4), transparent); }}
             .shield-container {{ width: 50px; height: 56px; position: relative; display: flex; justify-content: center; align-items: center; margin-right: 20px; flex-shrink: 0; }}
             .shield-svg {{ position: absolute; width: 100%; height: 100%; top: 0; left: 0; }}
