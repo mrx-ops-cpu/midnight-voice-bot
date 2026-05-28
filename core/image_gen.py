@@ -551,10 +551,10 @@ async def generate_streaks_image(top_streaks_data):
     output.seek(0)
     return output
 
-async def generate_games_image(top_games_data, offset=0):
+async def generate_games_image(top_games_data):
     width = 1600
     game_header_height = 70
-    player_row_height = 60
+    player_row_height = 55
     header_height = 70
     
     total_h = header_height
@@ -583,10 +583,7 @@ async def generate_games_image(top_games_data, offset=0):
         game_emoji = game_emoji.resize((40, 40))
         img.paste(game_emoji, (30, 15), game_emoji)
     
-    if offset == 0:
-        draw.text((85, 15), "TOP ІГОР (За весь час) - Ч. 1", fill=(220, 220, 220), font=font_header)
-    else:
-        draw.text((85, 15), "TOP ІГОР (За весь час) - Ч. 2", fill=(220, 220, 220), font=font_header)
+    draw.text((85, 15), "TOP ІГОР (За весь час)", fill=(220, 220, 220), font=font_header)
     
     medal_colors = [(255, 215, 0), (192, 192, 192), (205, 127, 50)]
     
@@ -594,11 +591,10 @@ async def generate_games_image(top_games_data, offset=0):
     for i, g in enumerate(top_games_data):
         draw.rectangle([0, y, width, y + game_header_height], fill=(30, 33, 37, 255))
         
-        rank_idx = i + offset
-        color_rank = medal_colors[rank_idx] if rank_idx < 3 else (80, 80, 80)
+        color_rank = medal_colors[i] if i < 3 else (80, 80, 80)
         draw.rectangle([0, y, 8, y + game_header_height], fill=color_rank)
         
-        draw.text((40, y + 20), f"#{rank_idx+1}", fill=color_rank, font=font_rank_small)
+        draw.text((40, y + 20), f"#{i+1}", fill=color_rank, font=font_rank_small)
         
         icon_url = g.get("icon_url", "")
         icon_x = 90

@@ -252,7 +252,7 @@ async def update_fame_message(guild, bot):
         top_streaks_data.append({"name": name, "streak": f"{streak_count} днів підряд", "avatar_url": avatar})
 
     # --- GAMES DATA ---
-    top_games = database.get_top_games(limit_games=8, limit_players=2)
+    top_games = database.get_top_games(limit_games=5, limit_players=2)
     top_games_data = []
     
     game_icons = {
@@ -283,29 +283,19 @@ async def update_fame_message(guild, bot):
                 "players": players_list
             })
 
-    # Split games into two chunks
-    games_chunk_1 = top_games_data[:4]
-    games_chunk_2 = top_games_data[4:8]
-
     # Generate images
     voice_file = discord.File(await image_gen.generate_voice_image(top_voice_data), filename="fame_voice.png")
     streaks_file = discord.File(await image_gen.generate_streaks_image(top_streaks_data), filename="fame_streaks.png")
-    
-    games_file_1 = discord.File(await image_gen.generate_games_image(games_chunk_1, offset=0), filename="fame_games_1.png")
-    games_file_2 = None
-    if games_chunk_2:
-        games_file_2 = discord.File(await image_gen.generate_games_image(games_chunk_2, offset=4), filename="fame_games_2.png")
+    games_file = discord.File(await image_gen.generate_games_image(top_games_data), filename="fame_games.png")
 
     # Hashes (serialize data dicts to check for changes)
     def hash_data(d): return hashlib.md5(json.dumps(d, sort_keys=True).encode('utf-8')).hexdigest()
     
     current_voice_hash = hash_data(top_voice_data)
     current_streaks_hash = hash_data(top_streaks_data)
-    current_games_1_hash = hash_data(games_chunk_1)
-    current_games_2_hash = hash_data(games_chunk_2) if games_chunk_2 else ""
+    current_games_hash = hash_data(top_games_data)
     
     async def update_msg(msg_id_attr, hash_attr, current_hash, file_obj):
-        if not file_obj: return None
         saved_hash = getattr(config, hash_attr, None)
         msg_id = getattr(config, msg_id_attr, None)
         
@@ -326,13 +316,10 @@ async def update_fame_message(guild, bot):
         setattr(config, hash_attr, current_hash)
         return msg.id
 
-    # Update messages in requested order: Voice, Streaks, Games 1, Games 2
+    # Update messages in requested order: Voice, Streaks, Games
     config.fame_voice_msg_id = await update_msg('fame_voice_msg_id', 'last_fame_voice_hash', current_voice_hash, voice_file)
     config.fame_streaks_msg_id = await update_msg('fame_streaks_msg_id', 'last_fame_streaks_hash', current_streaks_hash, streaks_file)
-    config.fame_games_msg_id = await update_msg('fame_games_msg_id', 'last_fame_games_hash', current_games_1_hash, games_file_1)
-    
-    if games_chunk_2:
-        config.fame_games_2_msg_id = await update_msg('fame_games_2_msg_id', 'last_fame_games_2_hash', current_games_2_hash, games_file_2)
+    config.fame_games_msg_id = await update_msg('fame_games_msg_id', 'last_fame_games_hash', current_games_hash, games_file)
     
     database.save_message_ids()
 
