@@ -252,7 +252,7 @@ async def update_fame_message(guild, bot):
         top_streaks_data.append({"name": name, "streak": f"{streak_count} днів підряд", "avatar_url": avatar})
 
     # --- GAMES DATA ---
-    top_games = database.get_top_games(limit_games=5, limit_players=1)
+    top_games = database.get_top_games(limit_games=5, limit_players=2)
     top_games_data = []
     
     game_icons = {
@@ -270,18 +270,17 @@ async def update_fame_message(guild, bot):
     if top_games:
         for game, data in top_games.items():
             icon_url = game_icons.get(game.lower(), "")
-            mvp_data = None
-            if data["players"]:
-                mvp_uid, mvp_sec = data["players"][0]
-                mvp_name = database.get_display_name(mvp_uid, guild, bot)
-                mvp_avatar = get_user_avatar(mvp_uid, guild, bot)
-                mvp_data = {"name": mvp_name, "time": format_time(mvp_sec), "avatar_url": mvp_avatar}
+            players_list = []
+            for p_uid, p_sec in data["players"]:
+                p_name = database.get_display_name(p_uid, guild, bot)
+                p_avatar = get_user_avatar(p_uid, guild, bot)
+                players_list.append({"name": p_name, "time": format_time(p_sec), "avatar_url": p_avatar})
             
             top_games_data.append({
                 "name": game,
                 "time": format_time(data['total']),
                 "icon_url": icon_url,
-                "mvp": mvp_data
+                "players": players_list
             })
 
     # Generate images
