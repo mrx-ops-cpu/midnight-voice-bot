@@ -539,7 +539,7 @@ async def render_html_to_image(html_content, width=600):
         await page.wait_for_timeout(500) # give time for fonts/images to load
         
         # We find the body element or a specific wrapper to screenshot exactly its height
-        screenshot_bytes = await page.locator(".container").screenshot(omit_background=True)
+        screenshot_bytes = await page.locator("body").screenshot(omit_background=True)
         await browser.close()
         
     return BytesIO(screenshot_bytes)
@@ -749,9 +749,9 @@ async def generate_games_image(top_games_data, offset=0, show_header=True):
                 background-color: #0f0a0a;
                 background-image: radial-gradient(circle at 10% 50%, rgba(100, 20, 20, 0.8) 0%, transparent 50%),
                                   radial-gradient(circle at 90% 80%, rgba(150, 30, 20, 0.6) 0%, transparent 40%);
-                font-family: 'Inter', sans-serif; color: white; padding: 30px; width: 580px; margin: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased;
+                font-family: 'Inter', sans-serif; color: white; padding: 30px; width: 600px; margin: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased;
             }}
-            .container {{ padding: 24px; display: flex; flex-direction: column; gap: 16px; width: 500px; box-sizing: border-box; }}
+            .container {{ padding: 24px; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box; }}
             .header {{ text-align: center; color: #ff7666; font-size: 24px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; filter: drop-shadow(0 0 10px rgba(255, 118, 102, 0.4)); }}
             .card {{ background: linear-gradient(145deg, rgba(30, 20, 20, 0.9), rgba(15, 10, 10, 0.95)); border-radius: 16px; padding: 18px; display: flex; align-items: stretch; position: relative; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid rgba(255, 118, 102, 0.15); }}
             .card::before {{ content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255, 118, 102, 0.4), transparent); }}
@@ -784,4 +784,4 @@ async def generate_games_image(top_games_data, offset=0, show_header=True):
     </body>
     </html>
     '''
-    return await render_html_to_image(html, width=580)
+    return await render_html_to_image(html)
