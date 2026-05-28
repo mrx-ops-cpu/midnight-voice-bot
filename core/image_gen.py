@@ -1,5 +1,6 @@
 import os
 import io
+import random
 import unicodedata
 import aiohttp
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
@@ -457,308 +458,458 @@ def apply_background(width, height):
     img = Image.new("RGBA", (width, height), (22, 25, 27, 255))
     return img
 
+# ── Shared aesthetic helpers ──────────────────────────────────────────────────
+
+_RANK_COLORS = [
+    (255, 200, 55),   # #1 Gold (warmer)
+    (180, 195, 210),  # #2 Silver (blue-ish)
+    (220, 140, 65),   # #3 Bronze (warmer)
+    (120, 130, 145),  # #4 Muted gray-blue
+    (120, 130, 145),  # #5
+]
+
+def _build_background(width, height, orb_configs):
+    """Rich dark background with gradient orbs and subtle noise grain."""
+    img = Image.new('RGBA', (width, height), (12, 14, 18, 255))
+    bg = ImageDraw.Draw(img)
+    for (x0, y0, x1, y1, r, g, b, a) in orb_configs:
+        bg.ellipse([x0, y0, x1, y1], fill=(r, g, b, a))
+    img = img.filter(ImageFilter.GaussianBlur(220))
+    # Noise / grain texture
+    noise = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+    nd = ImageDraw.Draw(noise)
+    rng = random.Random(42)
+    for _ in range(width * height // 40):
+        nx = rng.randint(0, width - 1)
+        ny = rng.randint(0, height - 1)
+        v = rng.randint(180, 255)
+        nd.point((nx, ny), fill=(v, v, v, rng.randint(6, 16)))
+    img = Image.alpha_composite(img, noise)
+    return img
+
+def _draw_header_glow(draw, img, text, x, y, font, emoji_img=None, emoji_size=60):
+    """Header text with glow effect, decorative divider, and optional emoji icon."""
+    # Paste emoji icon
+    if emoji_img:
+        ei = emoji_img.resize((emoji_size, emoji_size))
+        img.paste(ei, (x - emoji_size - 12, y + 2), ei)
+    # Glow layers
+    for offset, alpha in [(6, 25), (4, 45), (2, 80)]:
+        draw.text((x + offset, y + offset), text, fill=(255, 255, 255, alpha), font=font)
+    draw.text((x, y), text, fill=(255, 255, 255, 255), font=font)
+    # Decorative divider
+    tw = draw.textlength(text, font=font)
+    line_y = y + 72
+    mid = x + tw / 2
+    total_w = tw + 80
+    for i in range(int(total_w)):
+        px = int(mid - total_w / 2 + i)
+        dist = abs(i - total_w / 2) / (total_w / 2)
+        a = int(120 * (1 - dist ** 1.5))
+        if a > 0:
+            draw.line([(px, line_y), (px, line_y)], fill=(255, 255, 255, a))
+    for i in range(int(total_w * 0.6)):
+        px = int(mid - total_w * 0.3 + i)
+        dist = abs(i - total_w * 0.3) / (total_w * 0.3)
+        a = int(60 * (1 - dist ** 1.5))
+        if a > 0:
+            draw.line([(px, line_y + 3), (px, line_y + 3)], fill=(255, 255, 255, a))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  VOICE IMAGE
+# ═══════════════════════════════════════════════════════════════════════════════
+
 async def generate_voice_image(top_voice_data):
     width = 1200
-    row_height = 105
-    header_height = 130
-    
-    height = header_height + max(1, len(top_voice_data)) * (row_height + 25)
-    
-    img = Image.new('RGBA', (width, height), (10, 12, 16, 255))
-    
-    bg_draw = ImageDraw.Draw(img)
-    bg_draw.ellipse([-400, -300, 700, 800], fill=(90, 20, 150, 40))
-    bg_draw.ellipse([700, -100, 1800, 900], fill=(0, 150, 255, 30))
-    img = img.filter(ImageFilter.GaussianBlur(150))
-    
+    row_height = 110
+    card_gap = 16
+    header_height = 150
+
+    height = header_height + max(1, len(top_voice_data)) * (row_height + card_gap) + 30
+
+    # ── Background (purple + cyan orbs) ──
+    orbs = [
+        (-450, -350, 650, 750, 107, 33, 168, 35),
+        (600, -150, 1700, 850, 8, 145, 178, 28),
+        (200, int(height * 0.4), 900, int(height * 1.2), 80, 20, 140, 18),
+    ]
+    img = _build_background(width, height, orbs)
     draw = ImageDraw.Draw(img)
-    
-    font_header = get_font(60, bold=True)
-    font_name = get_font(52, bold=True)
-    font_name_fallback = get_fallback_font(52)
-    font_rank = get_font(40, bold=True)
-    font_time = get_font(52, bold=True)
-    
-    mic_img = await fetch_image("https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/2728.png") # Sparkles emoji
-    if mic_img:
-        mic_img = mic_img.resize((55, 55))
-        img.paste(mic_img, (55, 40), mic_img)
-        
-    draw.text((120, 42), "ТOП VOICE (За весь час)", fill=(0, 0, 0, 150), font=font_header)
-    draw.text((118, 40), "ТOП VOICE (За весь час)", fill=(255, 255, 255, 255), font=font_header)
-    
-    colors = [(255, 215, 0), (192, 192, 192), (205, 127, 50), (200, 200, 200), (200, 200, 200)]
-    
-    overlay = Image.new('RGBA', (width, height), (0,0,0,0))
-    overlay_draw = ImageDraw.Draw(overlay)
-    
+
+    # ── Header with glow ──
+    font_header = get_font(54, bold=True)
+    emoji_img = await fetch_image("https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/2728.png")
+    _draw_header_glow(draw, img, "ТОП VOICE (За весь час)", 130, 35, font_header, emoji_img=emoji_img)
+
+    # ── Fonts ──
+    font_name = get_font(34, bold=True)
+    font_name_fb = get_fallback_font(34)
+    font_rank = get_font(28, bold=True)
+    font_time = get_font(36, bold=True)
+    font_label = get_font(18)
+
+    # ── Overlay for cards ──
+    overlay = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+    od = ImageDraw.Draw(overlay)
+
     y = header_height
     for i, p in enumerate(top_voice_data):
-        c = colors[i] if i < len(colors) else (200, 200, 200)
-        
-        row_bg = (20, 25, 30, 140)
-        row_outline = (c[0], c[1], c[2], 120)
-        draw_rounded_rect(overlay_draw, [40, y, width - 40, y + row_height], 20, fill=row_bg, outline=row_outline, width=3)
-        
-        badge_w = 80
-        badge_h = 45
-        bx, by = 60, y + (row_height - badge_h) // 2
-        
-        draw_rounded_rect(overlay_draw, [bx, by, bx + badge_w, by + badge_h], 15, fill=(c[0], c[1], c[2], 30), outline=c, width=2)
-        r_w = draw.textlength(f"#{i+1}", font=font_rank)
-        overlay_draw.text((bx + (badge_w - r_w) // 2, by + 4), f"#{i+1}", fill=c, font=font_rank)
-        
-        ax, ay = 170, y + 12
+        c = _RANK_COLORS[i] if i < len(_RANK_COLORS) else _RANK_COLORS[-1]
+        card_x0, card_x1 = 50, width - 50
+
+        # Glassmorphism card
+        draw_rounded_rect(od, [card_x0, y, card_x1, y + row_height], 18,
+                          fill=(255, 255, 255, 8), outline=(255, 255, 255, 25), width=1)
+
+        # Left accent bar
+        od.rectangle([card_x0, y + 14, card_x0 + 4, y + row_height - 14], fill=c)
+
+        # Rank badge (pill)
+        badge_w, badge_h = 72, 38
+        bx = card_x0 + 22
+        by = y + (row_height - badge_h) // 2
+        draw_rounded_rect(od, [bx, by, bx + badge_w, by + badge_h], 14,
+                          fill=(c[0], c[1], c[2], 35))
+        draw_rounded_rect(od, [bx, by, bx + badge_w, by + badge_h], 14,
+                          fill=None, outline=(c[0], c[1], c[2], 180), width=2)
+        rank_txt = f"#{i+1}"
+        rw = od.textlength(rank_txt, font=font_rank)
+        od.text((bx + (badge_w - rw) / 2, by + 5), rank_txt, fill=c, font=font_rank)
+
+        # Avatar (80px with colored ring)
+        ax = card_x0 + 110
+        ay = y + (row_height - 80) // 2
         avatar_img = await fetch_image(p.get("avatar_url", ""))
         if avatar_img:
             avatar = make_circle_avatar(avatar_img, (80, 80), stroke_color=c, stroke_width=3)
-            overlay.paste(avatar, (ax-2, ay-2), avatar)
+            overlay.paste(avatar, (ax - 3, ay - 3), avatar)
         else:
-            overlay_draw.ellipse([ax, ay, ax+80, ay+80], fill=(40, 45, 50))
-            overlay_draw.ellipse([ax-2, ay-2, ax+82, ay+82], outline=c, width=3)
-            
+            od.ellipse([ax, ay, ax + 80, ay + 80], fill=(40, 45, 50))
+            od.ellipse([ax - 2, ay - 2, ax + 82, ay + 82], outline=c, width=3)
+
+        # Time value (right side, accent colored)
         time_text = p.get("time", "0")
-        t_w = overlay_draw.textlength(time_text, font=font_time)
-        tx, ty = width - 70 - t_w, y + 25
-        
-        nx, ny = 280, y + 25
-        name = p.get("name", "Unknown")
-        name = truncate_text(overlay_draw, name, font_name, tx - nx - 20)
-        
-        draw_text_fallback(overlay_draw, (nx+3, ny+3), name, fill=(0,0,0,150), primary_font=font_name, fallback_font=font_name_fallback)
-        draw_text_fallback(overlay_draw, (nx, ny), name, fill=(240, 240, 245), primary_font=font_name, fallback_font=font_name_fallback)
-        
-        overlay_draw.text((tx+3, ty+3), time_text, fill=(0,0,0,150), font=font_time)
-        overlay_draw.text((tx, ty), time_text, fill=c, font=font_time)
-        
-        y += row_height + 25
-        
+        t_w = od.textlength(time_text, font=font_time)
+        tx = card_x1 - 35 - int(t_w)
+        ty = y + (row_height - 44) // 2
+        od.text((tx + 2, ty + 2), time_text, fill=(0, 0, 0, 120), font=font_time)
+        od.text((tx, ty), time_text, fill=c, font=font_time)
+        label = "в голосі"
+        lw = od.textlength(label, font=font_label)
+        od.text((tx + (t_w - lw) / 2, ty + 40), label, fill=(255, 255, 255, 60), font=font_label)
+
+        # Name (with text shadow)
+        nx = ax + 95
+        ny = y + (row_height - 38) // 2
+        name = normalize_name(p.get("name", "Unknown"))
+        name = truncate_text(od, name, font_name, tx - nx - 25)
+        draw_text_fallback(od, (nx + 2, ny + 2), name, fill=(0, 0, 0, 100),
+                           primary_font=font_name, fallback_font=font_name_fb)
+        draw_text_fallback(od, (nx, ny), name, fill=(240, 242, 248),
+                           primary_font=font_name, fallback_font=font_name_fb)
+
+        # Subtle separator between cards
+        if i < len(top_voice_data) - 1:
+            sep_y = y + row_height + card_gap // 2
+            od.line([(card_x0 + 30, sep_y), (card_x1 - 30, sep_y)],
+                    fill=(255, 255, 255, 15), width=1)
+
+        y += row_height + card_gap
+
     img = Image.alpha_composite(img, overlay)
-    
+
     output = BytesIO()
     img.save(output, format="PNG")
     output.seek(0)
     return output
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  STREAKS IMAGE
+# ═══════════════════════════════════════════════════════════════════════════════
 
 async def generate_streaks_image(top_streaks_data):
     width = 1200
-    row_height = 105
-    header_height = 130
-    
-    height = header_height + max(1, len(top_streaks_data)) * (row_height + 25)
-    
-    img = Image.new('RGBA', (width, height), (10, 12, 16, 255))
-    
-    bg_draw = ImageDraw.Draw(img)
-    bg_draw.ellipse([-400, -300, 700, 800], fill=(200, 50, 0, 40))
-    bg_draw.ellipse([700, -100, 1800, 900], fill=(255, 120, 0, 30))
-    img = img.filter(ImageFilter.GaussianBlur(150))
-    
+    row_height = 110
+    card_gap = 16
+    header_height = 150
+
+    height = header_height + max(1, len(top_streaks_data)) * (row_height + card_gap) + 30
+
+    # ── Background (amber + red orbs) ──
+    orbs = [
+        (-450, -350, 650, 750, 217, 119, 6, 32),
+        (600, -150, 1700, 850, 220, 38, 38, 25),
+        (100, int(height * 0.3), 800, int(height * 1.1), 180, 60, 10, 16),
+    ]
+    img = _build_background(width, height, orbs)
     draw = ImageDraw.Draw(img)
-    
-    font_header = get_font(60, bold=True)
-    font_name = get_font(52, bold=True)
-    font_name_fallback = get_fallback_font(52)
-    font_rank = get_font(40, bold=True)
-    font_streak = get_font(52, bold=True)
-    
+
+    # ── Header with glow ──
+    font_header = get_font(54, bold=True)
     fire_header = await fetch_image("https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/1f525.png")
-    if fire_header:
-        fh = fire_header.resize((55, 55))
-        img.paste(fh, (55, 40), fh)
-    
-    draw.text((120, 42), "ТОП СЕРІЇ В ВОЙСІ", fill=(0, 0, 0, 150), font=font_header)
-    draw.text((118, 40), "ТОП СЕРІЇ В ВОЙСІ", fill=(255, 255, 255, 255), font=font_header)
-    
+    _draw_header_glow(draw, img, "ТОП СЕРІЇ В ВОЙСІ", 130, 35, font_header, emoji_img=fire_header)
+
+    # Fire emoji for rows
     fire_img = await fetch_image("https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/1f525.png")
     if fire_img:
-        fire_img = fire_img.resize((50, 50))
-        
-    colors = [(255, 215, 0), (192, 192, 192), (205, 127, 50), (200, 200, 200), (200, 200, 200)]
-    
-    overlay = Image.new('RGBA', (width, height), (0,0,0,0))
-    overlay_draw = ImageDraw.Draw(overlay)
-    
+        fire_img = fire_img.resize((42, 42))
+
+    # ── Fonts ──
+    font_name = get_font(34, bold=True)
+    font_name_fb = get_fallback_font(34)
+    font_rank = get_font(28, bold=True)
+    font_streak = get_font(40, bold=True)
+    font_label = get_font(18)
+
+    # ── Overlay ──
+    overlay = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+    od = ImageDraw.Draw(overlay)
+
     y = header_height
     for i, p in enumerate(top_streaks_data):
-        c = colors[i] if i < len(colors) else (200, 200, 200)
-        
-        row_bg = (20, 25, 30, 140)
-        row_outline = (c[0], c[1], c[2], 120)
-        draw_rounded_rect(overlay_draw, [40, y, width - 40, y + row_height], 20, fill=row_bg, outline=row_outline, width=3)
-        
-        badge_w = 80
-        badge_h = 45
-        bx, by = 60, y + (row_height - badge_h) // 2
-        
-        draw_rounded_rect(overlay_draw, [bx, by, bx + badge_w, by + badge_h], 15, fill=(c[0], c[1], c[2], 30), outline=c, width=2)
-        r_w = draw.textlength(f"#{i+1}", font=font_rank)
-        overlay_draw.text((bx + (badge_w - r_w) // 2, by + 4), f"#{i+1}", fill=c, font=font_rank)
-        
-        ax, ay = 170, y + 12
+        c = _RANK_COLORS[i] if i < len(_RANK_COLORS) else _RANK_COLORS[-1]
+        card_x0, card_x1 = 50, width - 50
+
+        # Glassmorphism card
+        draw_rounded_rect(od, [card_x0, y, card_x1, y + row_height], 18,
+                          fill=(255, 255, 255, 8), outline=(255, 255, 255, 25), width=1)
+
+        # Left accent bar
+        od.rectangle([card_x0, y + 14, card_x0 + 4, y + row_height - 14], fill=c)
+
+        # Rank badge (pill)
+        badge_w, badge_h = 72, 38
+        bx = card_x0 + 22
+        by = y + (row_height - badge_h) // 2
+        draw_rounded_rect(od, [bx, by, bx + badge_w, by + badge_h], 14,
+                          fill=(c[0], c[1], c[2], 35))
+        draw_rounded_rect(od, [bx, by, bx + badge_w, by + badge_h], 14,
+                          fill=None, outline=(c[0], c[1], c[2], 180), width=2)
+        rank_txt = f"#{i+1}"
+        rw = od.textlength(rank_txt, font=font_rank)
+        od.text((bx + (badge_w - rw) / 2, by + 5), rank_txt, fill=c, font=font_rank)
+
+        # Avatar
+        ax = card_x0 + 110
+        ay = y + (row_height - 80) // 2
         avatar_img = await fetch_image(p.get("avatar_url", ""))
         if avatar_img:
             avatar = make_circle_avatar(avatar_img, (80, 80), stroke_color=c, stroke_width=3)
-            overlay.paste(avatar, (ax-2, ay-2), avatar)
+            overlay.paste(avatar, (ax - 3, ay - 3), avatar)
         else:
-            overlay_draw.ellipse([ax, ay, ax+80, ay+80], fill=(40, 45, 50))
-            overlay_draw.ellipse([ax-2, ay-2, ax+82, ay+82], outline=c, width=3)
-            
+            od.ellipse([ax, ay, ax + 80, ay + 80], fill=(40, 45, 50))
+            od.ellipse([ax - 2, ay - 2, ax + 82, ay + 82], outline=c, width=3)
+
+        # Streak value (right side) — orange accent
         streak_txt = p.get("streak", "0")
-        s_w = overlay_draw.textlength(streak_txt, font=font_streak)
-        tx, ty = width - 100 - s_w, y + 25
-        
-        # Fire emoji
+        s_w = od.textlength(streak_txt, font=font_streak)
+        tx = card_x1 - 35 - int(s_w)
+        ty = y + (row_height - 50) // 2
+        od.text((tx + 2, ty + 2), streak_txt, fill=(0, 0, 0, 120), font=font_streak)
+        od.text((tx, ty), streak_txt, fill=(255, 140, 40), font=font_streak)
+        label = "серія"
+        lw = od.textlength(label, font=font_label)
+        od.text((tx + (s_w - lw) / 2, ty + 44), label, fill=(255, 255, 255, 60), font=font_label)
+
+        # Fire emoji next to streak
         if fire_img:
-            overlay.paste(fire_img, (int(tx - 65), int(ty - 5)), fire_img)
-            
-        nx, ny = 280, y + 25
-        name = p.get("name", "Unknown")
-        name = truncate_text(overlay_draw, name, font_name, tx - 65 - nx - 15)
-        
-        draw_text_fallback(overlay_draw, (nx+3, ny+3), name, fill=(0,0,0,150), primary_font=font_name, fallback_font=font_name_fallback)
-        draw_text_fallback(overlay_draw, (nx, ny), name, fill=(240, 240, 245), primary_font=font_name, fallback_font=font_name_fallback)
-        
-        overlay_draw.text((tx+3, ty+3), streak_txt, fill=(0,0,0,150), font=font_streak)
-        overlay_draw.text((tx, ty), streak_txt, fill=(255, 120, 0), font=font_streak)
-        
-        y += row_height + 25
-        
+            overlay.paste(fire_img, (int(tx - 52), int(ty + 2)), fire_img)
+
+        # Name (with text shadow)
+        nx = ax + 95
+        ny = y + (row_height - 38) // 2
+        name = normalize_name(p.get("name", "Unknown"))
+        max_name_w = (tx - 52 if fire_img else tx) - nx - 20
+        name = truncate_text(od, name, font_name, max_name_w)
+        draw_text_fallback(od, (nx + 2, ny + 2), name, fill=(0, 0, 0, 100),
+                           primary_font=font_name, fallback_font=font_name_fb)
+        draw_text_fallback(od, (nx, ny), name, fill=(240, 242, 248),
+                           primary_font=font_name, fallback_font=font_name_fb)
+
+        # Separator
+        if i < len(top_streaks_data) - 1:
+            sep_y = y + row_height + card_gap // 2
+            od.line([(card_x0 + 30, sep_y), (card_x1 - 30, sep_y)],
+                    fill=(255, 255, 255, 15), width=1)
+
+        y += row_height + card_gap
+
     img = Image.alpha_composite(img, overlay)
-    
+
     output = BytesIO()
     img.save(output, format="PNG")
     output.seek(0)
     return output
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  GAMES IMAGE
+# ═══════════════════════════════════════════════════════════════════════════════
+
 async def generate_games_image(top_games_data, offset=0, show_header=True):
     width = 1200
-    total_h = 1180 # Compact layout height fits perfectly
-        
-    img = Image.new('RGBA', (width, total_h), (10, 12, 16, 255))
-    
-    bg_draw = ImageDraw.Draw(img)
-    bg_draw.ellipse([-300, -200, 500, 600], fill=(200, 20, 50, 40))
-    bg_draw.ellipse([500, -100, 1300, 700], fill=(255, 100, 0, 30))
-    img = img.filter(ImageFilter.GaussianBlur(150))
-    
+    total_h = 1180
+
+    # ── Background (crimson + orange orbs) ──
+    orbs = [
+        (-350, -250, 550, 600, 190, 18, 60, 32),
+        (500, -120, 1400, 750, 234, 88, 12, 25),
+        (200, 500, 1000, 1200, 160, 30, 50, 18),
+    ]
+    img = _build_background(width, total_h, orbs)
     draw = ImageDraw.Draw(img)
-    
-    font_header = get_font(60, bold=True)
-    font_game = get_font(52, bold=True)
-    font_game_fallback = get_fallback_font(52)
-    font_time_game = get_font(46, bold=True)
-    font_player = get_font(42)
-    font_player_fallback = get_fallback_font(42)
-    font_player_time = get_font(42, bold=True)
-    font_rank_small = get_font(36, bold=True)
-    
+
+    # ── Header ──
+    font_header = get_font(54, bold=True)
     if show_header:
         game_emoji = await fetch_image("https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/1f3ae.png")
-        if game_emoji:
-            game_emoji = game_emoji.resize((55, 55))
-            img.paste(game_emoji, (40, 40), game_emoji)
-        
-        draw.text((105, 42), "ТOП ІГОР (За весь час)", fill=(0, 0, 0, 150), font=font_header)
-        draw.text((103, 40), "ТOП ІГОР (За весь час)", fill=(255, 255, 255, 255), font=font_header)
-    
-    medal_colors = [(255, 215, 0), (192, 192, 192), (205, 127, 50)]
-    
-    overlay = Image.new('RGBA', (width, total_h), (0,0,0,0))
-    overlay_draw = ImageDraw.Draw(overlay)
-    
-    y = 110 if show_header else 30
-    
+        _draw_header_glow(draw, img, "ТОП ІГОР (За весь час)", 130, 35, font_header, emoji_img=game_emoji)
+
+    # ── Fonts ──
+    font_game = get_font(32, bold=True)
+    font_game_fb = get_fallback_font(32)
+    font_time_total = get_font(30, bold=True)
+    font_player = get_font(26)
+    font_player_fb = get_fallback_font(26)
+    font_player_time = get_font(26, bold=True)
+    font_rank = get_font(24, bold=True)
+    font_player_rank = get_font(20, bold=True)
+
+    # ── Overlay ──
+    overlay = Image.new('RGBA', (width, total_h), (0, 0, 0, 0))
+    od = ImageDraw.Draw(overlay)
+
+    y = 120 if show_header else 30
+    card_x0, card_x1 = 40, width - 40
+
     for i, g in enumerate(top_games_data):
         players = g.get("players", [])
-        
-        card_h = 70 + len(players) * 60
-        
-        draw_rounded_rect(overlay_draw, [30, y, width - 30, y + card_h], 20, fill=(20, 25, 30, 140), outline=(255, 80, 80, 80), width=3)
-        
+        game_header_h = 65
+        player_row_h = 52
+        card_h = game_header_h + len(players) * player_row_h + 12
+
         rank = i + 1 + offset
-        c = medal_colors[i] if rank <= 3 else (150, 150, 150)
-        
-        draw_rounded_rect(overlay_draw, [45, y + 15, 115, y + 50], 10, fill=(c[0], c[1], c[2], 40), outline=c, width=2)
+        c = _RANK_COLORS[min(rank - 1, len(_RANK_COLORS) - 1)] if rank <= 3 else _RANK_COLORS[-1]
+
+        # Glassmorphism card
+        draw_rounded_rect(od, [card_x0, y, card_x1, y + card_h], 16,
+                          fill=(255, 255, 255, 8), outline=(255, 255, 255, 20), width=1)
+
+        # Left accent bar
+        od.rectangle([card_x0, y + 12, card_x0 + 4, y + card_h - 12], fill=c)
+
+        # Rank badge
+        badge_w, badge_h = 64, 34
+        bx = card_x0 + 18
+        by = y + 16
+        draw_rounded_rect(od, [bx, by, bx + badge_w, by + badge_h], 12,
+                          fill=(c[0], c[1], c[2], 35))
+        draw_rounded_rect(od, [bx, by, bx + badge_w, by + badge_h], 12,
+                          fill=None, outline=(c[0], c[1], c[2], 180), width=2)
         r_txt = f"#{rank}"
-        rw = overlay_draw.textlength(r_txt, font=font_rank_small)
-        overlay_draw.text((45 + (70 - rw) // 2, y + 17), r_txt, fill=c, font=font_rank_small)
-        
-        icon_x, icon_y = 130, y + 12
+        rw = od.textlength(r_txt, font=font_rank)
+        od.text((bx + (badge_w - rw) / 2, by + 5), r_txt, fill=c, font=font_rank)
+
+        # Game icon
+        icon_x, icon_y = card_x0 + 100, y + 13
+        icon_w, icon_h = 80, 40
         icon_url = g.get("icon_url", "")
         if icon_url:
             icon_img = await fetch_image(icon_url)
             if icon_img:
-                icon_img = ImageOps.fit(icon_img, (90, 45))
-                mask = Image.new('L', (90, 45), 0)
+                icon_img = ImageOps.fit(icon_img, (icon_w, icon_h))
+                mask = Image.new('L', (icon_w, icon_h), 0)
                 draw_mask = ImageDraw.Draw(mask)
-                draw_rounded_rect(draw_mask, [0, 0, 90, 45], 10, fill=255)
-                icon_rounded = Image.new('RGBA', (90, 45), (0,0,0,0))
-                icon_rounded.paste(icon_img, (0,0), mask=mask)
+                draw_rounded_rect(draw_mask, [0, 0, icon_w, icon_h], 8, fill=255)
+                icon_rounded = Image.new('RGBA', (icon_w, icon_h), (0, 0, 0, 0))
+                icon_rounded.paste(icon_img, (0, 0), mask=mask)
                 overlay.paste(icon_rounded, (icon_x, icon_y), icon_rounded)
             else:
-                draw_rounded_rect(overlay_draw, [icon_x, icon_y, icon_x+90, icon_y+45], 10, fill=(60, 60, 60))
+                draw_rounded_rect(od, [icon_x, icon_y, icon_x + icon_w, icon_y + icon_h], 8, fill=(60, 60, 60))
         else:
-            draw_rounded_rect(overlay_draw, [icon_x, icon_y, icon_x+90, icon_y+45], 10, fill=(60, 60, 60))
-            
+            draw_rounded_rect(od, [icon_x, icon_y, icon_x + icon_w, icon_y + icon_h], 8, fill=(60, 60, 60))
+
+        # Total time (right side, warm amber)
         total_t = g.get("time", "0")
-        t_w = overlay_draw.textlength(total_t, font=font_time_game)
-        tx, ty = width - 60 - t_w, y + 14
-        
-        nx, ny = 240, y + 10
-        name = g.get("name", "Unknown")
-        name = truncate_text(overlay_draw, name, font_game, tx - nx - 20)
-        draw_text_fallback(overlay_draw, (nx+2, ny+2), name, fill=(0,0,0,150), primary_font=font_game, fallback_font=font_game_fallback)
-        draw_text_fallback(overlay_draw, (nx, ny), name, fill=(255, 80, 80), primary_font=font_game, fallback_font=font_game_fallback)
-        
-        overlay_draw.text((tx+2, ty+2), total_t, fill=(0,0,0,150), font=font_time_game)
-        overlay_draw.text((tx, ty), total_t, fill=(255, 150, 50), font=font_time_game)
-        
-        overlay_draw.line([45, y + 65, width - 45, y + 65], fill=(255, 255, 255, 30), width=2)
-        
-        py = y + 75
-        
+        ttw = od.textlength(total_t, font=font_time_total)
+        ttx = card_x1 - 30 - int(ttw)
+        tty = y + 18
+        od.text((ttx + 2, tty + 2), total_t, fill=(0, 0, 0, 100), font=font_time_total)
+        od.text((ttx, tty), total_t, fill=(255, 175, 55), font=font_time_total)
+
+        # Game name (soft coral red)
+        gnx = icon_x + icon_w + 18
+        gny = y + 18
+        gname = g.get("name", "Unknown")
+        gname = truncate_text(od, gname, font_game, ttx - gnx - 20)
+        draw_text_fallback(od, (gnx + 2, gny + 2), gname, fill=(0, 0, 0, 100),
+                           primary_font=font_game, fallback_font=font_game_fb)
+        draw_text_fallback(od, (gnx, gny), gname, fill=(255, 100, 110),
+                           primary_font=font_game, fallback_font=font_game_fb)
+
+        # Thin divider between game header and player rows
+        div_y = y + game_header_h - 4
+        od.line([(card_x0 + 20, div_y), (card_x1 - 20, div_y)],
+                fill=(255, 255, 255, 25), width=1)
+
+        # ── Player sub-rows ──
+        py = y + game_header_h + 4
+        medal_labels = ["\U0001f947", "\U0001f948"]  # 🥇 🥈
+
         for j, pl in enumerate(players):
-            p_colors = [(255, 215, 0), (192, 192, 192)]
-            pc = p_colors[j] if j < 2 else (100, 100, 100)
-            
-            draw_rounded_rect(overlay_draw, [45, py, width - 45, py + 55], 12, fill=(0, 0, 0, 80))
-            
-            rank_label = "1st" if j == 0 else "2nd"
-            p_badge_w = 60
-            p_badge_h = 35
-            pbx, pby = 60, py + 10
-            draw_rounded_rect(overlay_draw, [pbx, pby, pbx + p_badge_w, pby + p_badge_h], 8, fill=(pc[0], pc[1], pc[2], 40))
-            pr_w = overlay_draw.textlength(rank_label, font=font_rank_small)
-            overlay_draw.text((pbx + (p_badge_w - pr_w) // 2, pby + 2), rank_label, fill=pc, font=font_rank_small)
-            
-            pax, pay = 135, py + 7
+            pc = _RANK_COLORS[j] if j < 2 else _RANK_COLORS[-1]
+
+            # Sub-row background
+            draw_rounded_rect(od, [card_x0 + 14, py, card_x1 - 14, py + player_row_h - 4], 10,
+                              fill=(0, 0, 0, 50))
+
+            # Rank label (medal emoji or #N)
+            rank_label = medal_labels[j] if j < len(medal_labels) else f"#{j+1}"
+            rl_w = od.textlength(rank_label, font=font_player_rank)
+            pbx = card_x0 + 28
+            pby = py + 8
+            p_badge_w = max(50, int(rl_w) + 20)
+            p_badge_h = player_row_h - 16
+            draw_rounded_rect(od, [pbx, pby, pbx + p_badge_w, pby + p_badge_h], 8,
+                              fill=(pc[0], pc[1], pc[2], 30))
+            od.text((pbx + (p_badge_w - rl_w) / 2, pby + 4), rank_label, fill=pc, font=font_player_rank)
+
+            # Player avatar
+            pax = pbx + p_badge_w + 14
+            pay = py + (player_row_h - 40) // 2
             p_av = await fetch_image(pl.get("avatar_url", ""))
             if p_av:
-                p_av = make_circle_avatar(p_av, (40, 40))
+                p_av = make_circle_avatar(p_av, (36, 36))
                 overlay.paste(p_av, (pax, pay), p_av)
             else:
-                overlay_draw.ellipse([pax, pay, pax+40, pay+40], fill=(60, 60, 60))
-            
+                od.ellipse([pax, pay, pax + 36, pay + 36], fill=(60, 60, 60))
+
+            # Player time (right, warm amber)
             pt = pl.get("time", "")
-            pt_w = overlay_draw.textlength(pt, font=font_player_time)
-            ptx, pty = width - 80 - pt_w, py + 8
-            
-            pnx, pny = 190, py + 6
-            pname = pl.get("name", "")
-            pname = truncate_text(overlay_draw, pname, font_player, ptx - pnx - 20)
-            draw_text_fallback(overlay_draw, (pnx+2, pny+2), pname, fill=(0,0,0,150), primary_font=font_player, fallback_font=font_player_fallback)
-            draw_text_fallback(overlay_draw, (pnx, pny), pname, fill=(220, 220, 225), primary_font=font_player, fallback_font=font_player_fallback)
-            
-            overlay_draw.text((ptx+2, pty+2), pt, fill=(0,0,0,150), font=font_player_time)
-            overlay_draw.text((ptx, pty), pt, fill=(255, 180, 50), font=font_player_time)
-            
-            py += 60
-            
-        y += card_h + 20
+            pt_w = od.textlength(pt, font=font_player_time)
+            ptx = card_x1 - 40 - int(pt_w)
+            pty = py + (player_row_h - 30) // 2
+            od.text((ptx + 1, pty + 1), pt, fill=(0, 0, 0, 80), font=font_player_time)
+            od.text((ptx, pty), pt, fill=(255, 175, 55), font=font_player_time)
+
+            # Player name
+            pnx = pax + 48
+            pny = py + (player_row_h - 30) // 2
+            pname = normalize_name(pl.get("name", ""))
+            pname = truncate_text(od, pname, font_player, ptx - pnx - 20)
+            draw_text_fallback(od, (pnx + 1, pny + 1), pname, fill=(0, 0, 0, 80),
+                               primary_font=font_player, fallback_font=font_player_fb)
+            draw_text_fallback(od, (pnx, pny), pname, fill=(225, 228, 235),
+                               primary_font=font_player, fallback_font=font_player_fb)
+
+            py += player_row_h
+
+        y += card_h + 14
 
     img = Image.alpha_composite(img, overlay)
-            
+
     output = BytesIO()
     img.save(output, format="PNG")
     output.seek(0)
