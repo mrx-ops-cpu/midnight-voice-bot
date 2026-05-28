@@ -264,7 +264,7 @@ async def update_fame_message(guild, bot):
         "rust": "https://cdn.akamai.steamstatic.com/steam/apps/252490/header.jpg",
         "pubg: battlegrounds": "https://cdn.akamai.steamstatic.com/steam/apps/578080/header.jpg",
         "pubg": "https://cdn.akamai.steamstatic.com/steam/apps/578080/header.jpg",
-        "arena breakout: infinite": "https://play-lh.googleusercontent.com/4W62eU4v-tQx-Wn2J704bO9-oV3Zf1E5-YtP_sL3VzM_-JpS0QvJ-l5Y5zK3x8A" 
+        "arena breakout: infinite": "https://cdn.akamai.steamstatic.com/steam/apps/2073620/header.jpg" 
     }
 
     if top_games:

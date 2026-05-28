@@ -395,42 +395,63 @@ async def generate_active_players_banner(active_matches):
             lvl = player.get("level", 1)
             elo = player.get("elo", 0)
             draw_faceit_level(draw, 350, y + 12, 26, lvl, font_lvl)
-            draw.text((385, y + 16), str(elo), fill=(220, 220, 220), font=font_small)
-            
-            # Team name
-            team = player.get("team", "")
-            if team:
-                draw.text((550, y + 16), team, fill=(100, 100, 100), font=font_small)
-            
-            y += row_height
+        candidates = ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "C:/Windows/Fonts/segoeui.ttf", "Roboto-Regular.ttf", "arial.ttf"]
+        
+    for font_path in candidates:
+        try:
+            return ImageFont.truetype(font_path, size)
+        except:
+            continue
+    return ImageFont.load_default()
 
-    output = BytesIO()
-    img.save(output, format="PNG")
-    output.seek(0)
-    return output
+def get_fallback_font(size):
+    try:
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        font_path = os.path.join(base_dir, "fonts", "NotoSansMath-Regular.ttf")
+        return ImageFont.truetype(font_path, size)
+    except:
+        return get_font(size)
+
+def draw_text_fallback(draw, xy, text, fill, primary_font, fallback_font):
+    if not text: return
+    x, y = xy
+    for char in text:
+        code = ord(char)
+        if code > 0xFFFF or (0x2100 <= code <= 0x214F): 
+            font = fallback_font
+        else:
+            font = primary_font
+            
+        draw.text((x, y), char, fill=fill, font=font)
+        x += font.getlength(char)
+
+def apply_background(width, height):
+    img = Image.new("RGBA", (width, height), (22, 25, 27, 255))
+    return img
 
 async def generate_voice_image(top_voice_data):
-    width = 1000
-    row_height = 70
-    header_height = 50
+    width = 1600
+    row_height = 110
+    header_height = 80
     
     height = header_height + max(1, len(top_voice_data)) * row_height
     img = apply_background(width, height)
     draw = ImageDraw.Draw(img)
     
-    font_header = get_font(18, bold=True)
-    font_text = get_font(20, bold=True)
-    font_rank = get_font(18, bold=True)
-    font_time = get_font(20, bold=True)
+    font_header = get_font(30, bold=True)
+    font_text = get_font(36, bold=True)
+    font_text_fallback = get_fallback_font(36)
+    font_rank = get_font(32, bold=True)
+    font_time = get_font(36, bold=True)
     
     draw.rectangle([0, 0, width, header_height], fill=(22, 25, 27, 255))
     
     mic_img = await fetch_image("https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/1f3a4.png")
     if mic_img:
-        mic_img = mic_img.resize((24, 24))
-        img.paste(mic_img, (20, 13), mic_img)
+        mic_img = mic_img.resize((40, 40))
+        img.paste(mic_img, (30, 20), mic_img)
     
-    draw.text((52, 14), "TOP VOICE (За весь час)", fill=(220, 220, 220), font=font_header)
+    draw.text((85, 20), "TOP VOICE (За весь час)", fill=(220, 220, 220), font=font_header)
     
     y = header_height
     for i, p in enumerate(top_voice_data):
@@ -438,22 +459,23 @@ async def generate_voice_image(top_voice_data):
         draw.rectangle([0, y, width, y + row_height], fill=bg_color)
         
         color_rank = (255, 215, 0) if i == 0 else (192, 192, 192) if i == 1 else (205, 127, 50) if i == 2 else (60, 60, 60)
-        draw.rectangle([0, y, 5, y + row_height], fill=color_rank)
-        draw.text((25, y + 22), f"#{i+1}", fill=color_rank, font=font_rank)
+        draw.rectangle([0, y, 8, y + row_height], fill=color_rank)
+        draw.text((40, y + 35), f"#{i+1}", fill=color_rank, font=font_rank)
         
         avatar_img = await fetch_image(p.get("avatar_url", ""))
         if avatar_img:
-            avatar = make_circle_avatar(avatar_img, (48, 48))
-            img.paste(avatar, (70, y + 11), avatar)
+            avatar = make_circle_avatar(avatar_img, (80, 80))
+            img.paste(avatar, (120, y + 15), avatar)
         else:
-            draw.ellipse([70, y+11, 118, y+59], fill=(60, 60, 60))
+            draw.ellipse([120, y+15, 200, y+95], fill=(60, 60, 60))
             
-        draw.text((135, y + 22), normalize_name(p.get("name", "Unknown")), fill=(240, 240, 240), font=font_text)
+        name = p.get("name", "Unknown")
+        draw_text_fallback(draw, (230, y + 33), name, fill=(240, 240, 240), primary_font=font_text, fallback_font=font_text_fallback)
         
         time_text = p.get("time", "0")
         bbox = draw.textbbox((0, 0), time_text, font=font_time)
         tw = bbox[2] - bbox[0]
-        draw.text((width - tw - 30, y + 22), time_text, fill=(255, 180, 50), font=font_time)
+        draw.text((width - tw - 40, y + 33), time_text, fill=(255, 180, 50), font=font_time)
         
         y += row_height
         
@@ -463,31 +485,32 @@ async def generate_voice_image(top_voice_data):
     return output
 
 async def generate_streaks_image(top_streaks_data):
-    width = 1000
-    row_height = 70
-    header_height = 50
+    width = 1600
+    row_height = 110
+    header_height = 80
     
     height = header_height + max(1, len(top_streaks_data)) * row_height
     img = apply_background(width, height)
     draw = ImageDraw.Draw(img)
     
-    font_header = get_font(18, bold=True)
-    font_text = get_font(20, bold=True)
-    font_rank = get_font(18, bold=True)
-    font_streak = get_font(20, bold=True)
+    font_header = get_font(30, bold=True)
+    font_text = get_font(36, bold=True)
+    font_text_fallback = get_fallback_font(36)
+    font_rank = get_font(32, bold=True)
+    font_streak = get_font(36, bold=True)
     
     draw.rectangle([0, 0, width, header_height], fill=(22, 25, 27, 255))
     
     fire_header = await fetch_image("https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/1f525.png")
     if fire_header:
-        fh = fire_header.resize((24, 24))
-        img.paste(fh, (20, 13), fh)
+        fh = fire_header.resize((40, 40))
+        img.paste(fh, (30, 20), fh)
     
-    draw.text((52, 14), "ТОП СЕРІЇ В ВОЙСІ", fill=(220, 220, 220), font=font_header)
+    draw.text((85, 20), "ТОП СЕРІЇ В ВОЙСІ", fill=(220, 220, 220), font=font_header)
     
     fire_img = await fetch_image("https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/1f525.png")
     if fire_img:
-        fire_img = fire_img.resize((26, 26))
+        fire_img = fire_img.resize((42, 42))
     
     y = header_height
     for i, p in enumerate(top_streaks_data):
@@ -495,27 +518,28 @@ async def generate_streaks_image(top_streaks_data):
         draw.rectangle([0, y, width, y + row_height], fill=bg_color)
         
         color_rank = (255, 215, 0) if i == 0 else (192, 192, 192) if i == 1 else (205, 127, 50) if i == 2 else (60, 60, 60)
-        draw.rectangle([0, y, 5, y + row_height], fill=color_rank)
-        draw.text((25, y + 22), f"#{i+1}", fill=color_rank, font=font_rank)
+        draw.rectangle([0, y, 8, y + row_height], fill=color_rank)
+        draw.text((40, y + 35), f"#{i+1}", fill=color_rank, font=font_rank)
         
         avatar_img = await fetch_image(p.get("avatar_url", ""))
         if avatar_img:
-            avatar = make_circle_avatar(avatar_img, (48, 48))
-            img.paste(avatar, (70, y + 11), avatar)
+            avatar = make_circle_avatar(avatar_img, (80, 80))
+            img.paste(avatar, (120, y + 15), avatar)
         else:
-            draw.ellipse([70, y+11, 118, y+59], fill=(60, 60, 60))
+            draw.ellipse([120, y+15, 200, y+95], fill=(60, 60, 60))
             
-        draw.text((135, y + 22), normalize_name(p.get("name", "Unknown")), fill=(240, 240, 240), font=font_text)
+        name = p.get("name", "Unknown")
+        draw_text_fallback(draw, (230, y + 33), name, fill=(240, 240, 240), primary_font=font_text, fallback_font=font_text_fallback)
         
         streak_text = p.get("streak", "0")
         bbox = draw.textbbox((0, 0), streak_text, font=font_streak)
         tw = bbox[2] - bbox[0]
-        text_x = width - tw - 30
+        text_x = width - tw - 40
         
         if fire_img:
-            img.paste(fire_img, (text_x - 32, y + 20), fire_img)
+            img.paste(fire_img, (text_x - 55, y + 33), fire_img)
             
-        draw.text((text_x, y + 22), streak_text, fill=(255, 120, 0), font=font_streak)
+        draw.text((text_x, y + 35), streak_text, fill=(255, 120, 0), font=font_streak)
         
         y += row_height
         
@@ -525,12 +549,11 @@ async def generate_streaks_image(top_streaks_data):
     return output
 
 async def generate_games_image(top_games_data):
-    width = 1000
-    game_header_height = 60
-    player_row_height = 50
-    header_height = 50
+    width = 1600
+    game_header_height = 100
+    player_row_height = 85
+    header_height = 80
     
-    # Calculate total height
     total_h = header_height
     for g in top_games_data:
         total_h += game_header_height
@@ -542,58 +565,55 @@ async def generate_games_image(top_games_data):
     img = apply_background(width, total_h)
     draw = ImageDraw.Draw(img)
     
-    font_header = get_font(18, bold=True)
-    font_game = get_font(20, bold=True)
-    font_time_game = get_font(16)
-    font_player = get_font(18, bold=True)
-    font_player_time = get_font(16)
-    font_rank_small = get_font(14, bold=True)
+    font_header = get_font(30, bold=True)
+    font_game = get_font(36, bold=True)
+    font_time_game = get_font(28)
+    font_player = get_font(32, bold=True)
+    font_player_fallback = get_fallback_font(32)
+    font_player_time = get_font(28)
+    font_rank_small = get_font(24, bold=True)
     
-    # Main header
     draw.rectangle([0, 0, width, header_height], fill=(22, 25, 27, 255))
     
     game_emoji = await fetch_image("https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/1f3ae.png")
     if game_emoji:
-        game_emoji = game_emoji.resize((24, 24))
-        img.paste(game_emoji, (20, 13), game_emoji)
+        game_emoji = game_emoji.resize((40, 40))
+        img.paste(game_emoji, (30, 20), game_emoji)
     
-    draw.text((52, 14), "TOP ІГОР (За весь час)", fill=(220, 220, 220), font=font_header)
+    draw.text((85, 20), "TOP ІГОР (За весь час)", fill=(220, 220, 220), font=font_header)
     
     medal_colors = [(255, 215, 0), (192, 192, 192), (205, 127, 50)]
     
     y = header_height
     for i, g in enumerate(top_games_data):
-        # Game header row
         draw.rectangle([0, y, width, y + game_header_height], fill=(30, 33, 37, 255))
         
         color_rank = medal_colors[i] if i < 3 else (80, 80, 80)
-        draw.rectangle([0, y, 5, y + game_header_height], fill=color_rank)
+        draw.rectangle([0, y, 8, y + game_header_height], fill=color_rank)
         
-        draw.text((20, y + 18), f"#{i+1}", fill=color_rank, font=font_rank_small)
+        draw.text((40, y + 33), f"#{i+1}", fill=color_rank, font=font_rank_small)
         
-        # Game icon
         icon_url = g.get("icon_url", "")
-        icon_x = 55
+        icon_x = 90
         if icon_url:
             icon_img = await fetch_image(icon_url)
             if icon_img:
-                icon_img = icon_img.resize((36, 36))
-                img.paste(icon_img, (icon_x, y + 12))
+                icon_img = icon_img.resize((64, 64))
+                img.paste(icon_img, (icon_x, y + 18))
             else:
-                draw.rectangle([icon_x, y+12, icon_x+36, y+48], fill=(60, 60, 60))
+                draw.rectangle([icon_x, y+18, icon_x+64, y+82], fill=(60, 60, 60))
         else:
-            draw.rectangle([icon_x, y+12, icon_x+36, y+48], fill=(60, 60, 60))
+            draw.rectangle([icon_x, y+18, icon_x+64, y+82], fill=(60, 60, 60))
         
-        draw.text((icon_x + 46, y + 18), g.get("name", "Unknown"), fill=(240, 240, 240), font=font_game)
+        draw.text((icon_x + 80, y + 28), g.get("name", "Unknown"), fill=(240, 240, 240), font=font_game)
         
         total_t = g.get("time", "0")
         bbox = draw.textbbox((0, 0), total_t, font=font_time_game)
         tw = bbox[2] - bbox[0]
-        draw.text((width - tw - 30, y + 20), total_t, fill=(120, 120, 120), font=font_time_game)
+        draw.text((width - tw - 40, y + 35), total_t, fill=(120, 120, 120), font=font_time_game)
         
         y += game_header_height
         
-        # Player rows
         players = g.get("players", [])
         for j, pl in enumerate(players):
             bg_pl = (38, 41, 46, 255) if j % 2 == 0 else (33, 36, 40, 255)
@@ -603,22 +623,23 @@ async def generate_games_image(top_games_data):
             p_color = p_colors[j] if j < 2 else (100, 100, 100)
             
             rank_label = "1st" if j == 0 else "2nd"
-            draw_rounded_rect(draw, [40, y+14, 72, y+36], 4, (p_color[0], p_color[1], p_color[2], 40))
-            draw.text((44, y + 16), rank_label, fill=p_color, font=font_rank_small)
+            draw_rounded_rect(draw, [80, y+25, 125, y+55], 6, (p_color[0], p_color[1], p_color[2], 40))
+            draw.text((88, y + 26), rank_label, fill=p_color, font=font_rank_small)
             
             pl_avatar = await fetch_image(pl.get("avatar_url", ""))
             if pl_avatar:
-                pa = make_circle_avatar(pl_avatar, (34, 34))
-                img.paste(pa, (85, y + 8), pa)
+                pa = make_circle_avatar(pl_avatar, (60, 60))
+                img.paste(pa, (150, y + 12), pa)
             else:
-                draw.ellipse([85, y+8, 119, y+42], fill=(60, 60, 60))
+                draw.ellipse([150, y+12, 210, y+72], fill=(60, 60, 60))
             
-            draw.text((130, y + 14), normalize_name(pl.get("name", "")), fill=(200, 200, 200), font=font_player)
+            name = pl.get("name", "")
+            draw_text_fallback(draw, (235, y + 25), name, fill=(200, 200, 200), primary_font=font_player, fallback_font=font_player_fallback)
             
             pt = pl.get("time", "")
             bbox = draw.textbbox((0, 0), pt, font=font_player_time)
             ptw = bbox[2] - bbox[0]
-            draw.text((width - ptw - 30, y + 16), pt, fill=(150, 150, 150), font=font_player_time)
+            draw.text((width - ptw - 40, y + 28), pt, fill=(150, 150, 150), font=font_player_time)
             
             y += player_row_height
         
