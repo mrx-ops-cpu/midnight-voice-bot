@@ -586,7 +586,7 @@ async def generate_voice_image(top_voice_data):
                 font-family: 'Inter', sans-serif; color: white; padding: 30px; width: 600px; margin: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased;
             }}
             .header {{ text-align: center; font-size: 26px; font-weight: 900; color: #a461f5; text-shadow: 0 0 15px rgba(164, 97, 245, 0.8); margin-bottom: 25px; text-transform: uppercase; }}
-            .container {{ background: #18191c; border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 14px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }}
+            .container {{ background: rgba(24, 25, 28, 0.4); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 14px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }}
             .container-top {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }}
             .top-label {{ font-size: 14px; font-weight: 800; color: #b0b5bd; display: flex; align-items: center; gap: 8px; }}
             .voice-btn {{ background: rgba(30, 80, 40, 0.2); border: 1px solid rgba(60, 150, 60, 0.4); color: #4ade80; padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 800; display: flex; align-items: center; gap: 6px; text-shadow: 0 0 8px rgba(74, 222, 128, 0.4); }}
@@ -660,7 +660,7 @@ async def generate_streaks_image(top_streaks_data):
                 font-family: 'Inter', sans-serif; color: white; padding: 30px; width: 600px; margin: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased;
             }}
             .header {{ text-align: center; font-size: 26px; font-weight: 900; color: #ff9a44; text-shadow: 0 0 15px rgba(255, 120, 0, 0.8); margin-bottom: 25px; text-transform: uppercase; }}
-            .container {{ background: #18191c; border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 14px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }}
+            .container {{ background: rgba(24, 25, 28, 0.4); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 14px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }}
             .container-top {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }}
             .top-label {{ font-size: 14px; font-weight: 800; color: #b0b5bd; display: flex; align-items: center; gap: 8px; }}
             .voice-btn {{ background: rgba(30, 80, 40, 0.2); border: 1px solid rgba(60, 150, 60, 0.4); color: #4ade80; padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 800; display: flex; align-items: center; gap: 6px; text-shadow: 0 0 8px rgba(74, 222, 128, 0.4); }}
@@ -737,7 +737,7 @@ async def generate_games_image(top_games_data, offset=0, show_header=True):
         </div>
         '''
 
-    header_html = '<div class="header">ТОП ІГОР (За весь час)</div>' if show_header else ''
+    header_html = '<div class="header">ТОП ІГОР (ЗА ВЕСЬ ЧАС)</div>' if show_header else '<div class="header" style="opacity: 0; user-select: none;">ТОП ІГОР (ЗА ВЕСЬ ЧАС)</div>'
 
     html = f'''
     <!DOCTYPE html>
@@ -752,23 +752,24 @@ async def generate_games_image(top_games_data, offset=0, show_header=True):
                 font-family: 'Inter', sans-serif; color: white; padding: 30px; width: 600px; margin: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased;
             }}
             .container {{ padding: 24px; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box; }}
-            .header {{ text-align: center; color: #ff7666; font-size: 24px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; filter: drop-shadow(0 0 10px rgba(255, 118, 102, 0.4)); }}
-            .card {{ background: linear-gradient(145deg, rgba(30, 20, 20, 0.9), rgba(15, 10, 10, 0.95)); border-radius: 16px; padding: 18px; display: flex; align-items: stretch; position: relative; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid rgba(255, 118, 102, 0.15); }}
+            .header {{ text-align: center; color: #ff7666; font-size: 26px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; filter: drop-shadow(0 0 10px rgba(255, 118, 102, 0.4)); }}
+            .card {{ background: linear-gradient(145deg, rgba(30, 20, 20, 0.9), rgba(15, 10, 10, 0.95)); border-radius: 18px; padding: 22px; display: flex; align-items: stretch; position: relative; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid rgba(255, 118, 102, 0.15); margin-bottom: 20px; }}
+            .card:last-child {{ margin-bottom: 0; }}
             .card::before {{ content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255, 118, 102, 0.4), transparent); }}
-            .shield-container {{ width: 44px; height: 50px; position: relative; display: flex; justify-content: center; align-items: center; margin-right: 16px; flex-shrink: 0; }}
+            .shield-container {{ width: 50px; height: 56px; position: relative; display: flex; justify-content: center; align-items: center; margin-right: 20px; flex-shrink: 0; }}
             .shield-svg {{ position: absolute; width: 100%; height: 100%; top: 0; left: 0; }}
-            .rank-text {{ font-size: 16px; font-weight: 700; z-index: 2; margin-top: -2px; }}
-            .game-icon {{ width: 64px; height: 64px; border-radius: 12px; margin-right: 18px; flex-shrink: 0; background-color: #2a2a2a; border: 1px solid rgba(255,255,255,0.05); background-size: cover; background-position: center; }}
+            .rank-text {{ font-size: 18px; font-weight: 800; z-index: 2; margin-top: -2px; }}
+            .game-icon {{ width: 76px; height: 76px; border-radius: 14px; margin-right: 22px; flex-shrink: 0; background-color: #2a2a2a; border: 1px solid rgba(255,255,255,0.05); background-size: cover; background-position: center; }}
             .game-info {{ flex: 1; display: flex; flex-direction: column; justify-content: center; }}
-            .game-title-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }}
-            .game-name {{ font-size: 19px; font-weight: 700; color: #ff7666; text-shadow: 0 0 10px rgba(255, 118, 102, 0.8), 0 0 20px rgba(255, 118, 102, 0.4); }}
-            .game-time {{ font-size: 19px; font-weight: 700; color: #f7a93b; text-shadow: 0 0 10px rgba(247, 169, 59, 0.8), 0 0 20px rgba(247, 169, 59, 0.4); }}
-            .player-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }}
+            .game-title-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }}
+            .game-name {{ font-size: 22px; font-weight: 800; color: #ff7666; text-shadow: 0 0 10px rgba(255, 118, 102, 0.8), 0 0 20px rgba(255, 118, 102, 0.4); }}
+            .game-time {{ font-size: 22px; font-weight: 800; color: #f7a93b; text-shadow: 0 0 10px rgba(247, 169, 59, 0.8), 0 0 20px rgba(247, 169, 59, 0.4); }}
+            .player-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }}
             .player-row:last-child {{ margin-bottom: 0; }}
             .player-left {{ display: flex; align-items: center; }}
-            .player-avatar {{ width: 18px; height: 18px; border-radius: 50%; background: #ccc; margin-right: 8px; background-size: cover; background-position: center; }}
-            .player-name {{ font-size: 15px; color: #c4cdd5; font-weight: 600; }}
-            .player-time {{ font-size: 15px; color: #e5c487; font-weight: 600; text-shadow: 0 0 8px rgba(229, 196, 135, 0.7); }}
+            .player-avatar {{ width: 22px; height: 22px; border-radius: 50%; background: #ccc; margin-right: 10px; background-size: cover; background-position: center; }}
+            .player-name {{ font-size: 17px; color: #c4cdd5; font-weight: 700; }}
+            .player-time {{ font-size: 17px; color: #e5c487; font-weight: 700; text-shadow: 0 0 8px rgba(229, 196, 135, 0.7); }}
             .rank-1 {{ color: #ff6633; filter: drop-shadow(0 0 6px rgba(255,102,51,0.5)); }}
             .rank-2 {{ color: #ff5522; filter: drop-shadow(0 0 6px rgba(255,85,34,0.5)); }}
             .rank-3 {{ color: #ee4411; filter: drop-shadow(0 0 6px rgba(238,68,17,0.5)); }}
