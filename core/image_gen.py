@@ -570,10 +570,10 @@ async def generate_games_image(top_games_data):
     
     font_header = get_font(30, bold=True)
     font_game = get_font(36, bold=True)
-    font_time_game = get_font(28)
+    font_time_game = get_font(36, bold=True)
     font_player = get_font(36, bold=True)
     font_player_fallback = get_fallback_font(36)
-    font_player_time = get_font(28)
+    font_player_time = get_font(36, bold=True)
     font_rank_small = get_font(24, bold=True)
     
     draw.rectangle([0, 0, width, header_height], fill=(22, 25, 27, 255))
@@ -608,12 +608,12 @@ async def generate_games_image(top_games_data):
         else:
             draw.rectangle([icon_x, y+10, icon_x+50, y+60], fill=(60, 60, 60))
         
-        draw.text((icon_x + 65, y + 15), g.get("name", "Unknown"), fill=(240, 240, 240), font=font_game)
+        draw.text((icon_x + 65, y + 13), g.get("name", "Unknown"), fill=(100, 200, 255), font=font_game)
         
         total_t = g.get("time", "0")
         bbox = draw.textbbox((0, 0), total_t, font=font_time_game)
         tw = bbox[2] - bbox[0]
-        draw.text((width - tw - 40, y + 20), total_t, fill=(120, 120, 120), font=font_time_game)
+        draw.text((width - tw - 40, y + 13), total_t, fill=(255, 180, 50), font=font_time_game)
         
         y += game_header_height
         
@@ -632,17 +632,17 @@ async def generate_games_image(top_games_data):
             pl_avatar = await fetch_image(pl.get("avatar_url", ""))
             if pl_avatar:
                 pa = make_circle_avatar(pl_avatar, (50, 50))
-                img.paste(pa, (150, y + 5), pa)
+                img.paste(pa, (150, y + 2), pa)
             else:
-                draw.ellipse([150, y+5, 200, y+55], fill=(60, 60, 60))
+                draw.ellipse([150, y+2, 200, y+52], fill=(60, 60, 60))
             
             name = pl.get("name", "")
-            draw_text_fallback(draw, (220, y + 10), name, fill=(200, 200, 200), primary_font=font_player, fallback_font=font_player_fallback)
+            draw_text_fallback(draw, (220, y + 8), name, fill=(200, 200, 200), primary_font=font_player, fallback_font=font_player_fallback)
             
             pt = pl.get("time", "")
             bbox = draw.textbbox((0, 0), pt, font=font_player_time)
             ptw = bbox[2] - bbox[0]
-            draw.text((width - ptw - 40, y + 15), pt, fill=(150, 150, 150), font=font_player_time)
+            draw.text((width - ptw - 40, y + 8), pt, fill=(255, 180, 50), font=font_player_time)
             
             y += player_row_height
         

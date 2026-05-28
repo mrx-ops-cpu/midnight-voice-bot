@@ -374,13 +374,24 @@ class CommandsCog(commands.Cog):
             
         database.save_monitor_channel(channel.id)
         
+        try:
+            await channel.purge(limit=50, check=lambda m: m.author == self.bot.user)
+        except:
+            pass
+            
         config.live_message_id = None
         config.fame_voice_msg_id = None
         config.fame_streaks_msg_id = None
         config.fame_games_msg_id = None
+        
+        config.last_live_hash = None
+        config.last_fame_voice_hash = None
+        config.last_fame_streaks_hash = None
+        config.last_fame_games_hash = None
+        
         database.save_message_ids()
         
-        await interaction.response.send_message(f"✅ Канал моніторингу встановлено на {channel.mention}! Видаліть усі старі повідомлення бота в цьому каналі, зараз він надішле нові в правильному порядку.")
+        await interaction.response.send_message(f"✅ Канал моніторингу встановлено на {channel.mention}! Зараз бот надішле нові панелі у правильному порядку.")
         
         async def send_in_order():
             await utils.update_fame_message(interaction.guild, self.bot)
