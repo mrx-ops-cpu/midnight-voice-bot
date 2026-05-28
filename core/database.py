@@ -92,6 +92,7 @@ def load_message_ids():
             config.fame_voice_msg_id = d.get("fame_voice")
             config.fame_streaks_msg_id = d.get("fame_streaks")
             config.fame_games_msg_id = d.get("fame_games")
+            config.fame_games_2_msg_id = d.get("fame_games_2")
         except: pass
 
 def save_message_ids():
@@ -102,7 +103,8 @@ def save_message_ids():
                 "live": config.live_message_id, 
                 "fame_voice": config.fame_voice_msg_id,
                 "fame_streaks": config.fame_streaks_msg_id,
-                "fame_games": config.fame_games_msg_id
+                "fame_games": config.fame_games_msg_id,
+                "fame_games_2": getattr(config, "fame_games_2_msg_id", None)
             }, f)
         os.replace(tmp_file, config.MSG_FILE)
     except Exception as e: print(f"ERROR save_message_ids: {e}")

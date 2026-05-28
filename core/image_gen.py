@@ -407,7 +407,10 @@ async def generate_active_players_banner(active_matches):
 def get_fallback_font(size):
     try:
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        font_path = os.path.join(base_dir, "fonts", "NotoSansMath-Regular.ttf")
+        # Try Segoe UI Symbol first (it has Fraktur like 𝕯)
+        font_path = "C:/Windows/Fonts/seguisym.ttf"
+        if not os.path.exists(font_path):
+            font_path = os.path.join(base_dir, "fonts", "seguisym.ttf")
         return ImageFont.truetype(font_path, size)
     except:
         return get_font(size)
@@ -548,10 +551,10 @@ async def generate_streaks_image(top_streaks_data):
     output.seek(0)
     return output
 
-async def generate_games_image(top_games_data):
+async def generate_games_image(top_games_data, offset=0):
     width = 1600
-    game_header_height = 80
-    player_row_height = 70
+    game_header_height = 70
+    player_row_height = 60
     header_height = 70
     
     total_h = header_height
@@ -568,8 +571,8 @@ async def generate_games_image(top_games_data):
     font_header = get_font(30, bold=True)
     font_game = get_font(36, bold=True)
     font_time_game = get_font(28)
-    font_player = get_font(32, bold=True)
-    font_player_fallback = get_fallback_font(32)
+    font_player = get_font(36, bold=True)
+    font_player_fallback = get_fallback_font(36)
     font_player_time = get_font(28)
     font_rank_small = get_font(24, bold=True)
     
@@ -578,9 +581,12 @@ async def generate_games_image(top_games_data):
     game_emoji = await fetch_image("https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/1f3ae.png")
     if game_emoji:
         game_emoji = game_emoji.resize((40, 40))
-        img.paste(game_emoji, (30, 20), game_emoji)
+        img.paste(game_emoji, (30, 15), game_emoji)
     
-    draw.text((85, 20), "TOP ІГОР (За весь час)", fill=(220, 220, 220), font=font_header)
+    if offset == 0:
+        draw.text((85, 15), "TOP ІГОР (За весь час) - Ч. 1", fill=(220, 220, 220), font=font_header)
+    else:
+        draw.text((85, 15), "TOP ІГОР (За весь час) - Ч. 2", fill=(220, 220, 220), font=font_header)
     
     medal_colors = [(255, 215, 0), (192, 192, 192), (205, 127, 50)]
     
@@ -588,29 +594,30 @@ async def generate_games_image(top_games_data):
     for i, g in enumerate(top_games_data):
         draw.rectangle([0, y, width, y + game_header_height], fill=(30, 33, 37, 255))
         
-        color_rank = medal_colors[i] if i < 3 else (80, 80, 80)
+        rank_idx = i + offset
+        color_rank = medal_colors[rank_idx] if rank_idx < 3 else (80, 80, 80)
         draw.rectangle([0, y, 8, y + game_header_height], fill=color_rank)
         
-        draw.text((40, y + 33), f"#{i+1}", fill=color_rank, font=font_rank_small)
+        draw.text((40, y + 20), f"#{rank_idx+1}", fill=color_rank, font=font_rank_small)
         
         icon_url = g.get("icon_url", "")
         icon_x = 90
         if icon_url:
             icon_img = await fetch_image(icon_url)
             if icon_img:
-                icon_img = icon_img.resize((64, 64))
-                img.paste(icon_img, (icon_x, y + 18))
+                icon_img = icon_img.resize((50, 50))
+                img.paste(icon_img, (icon_x, y + 10))
             else:
-                draw.rectangle([icon_x, y+18, icon_x+64, y+82], fill=(60, 60, 60))
+                draw.rectangle([icon_x, y+10, icon_x+50, y+60], fill=(60, 60, 60))
         else:
-            draw.rectangle([icon_x, y+18, icon_x+64, y+82], fill=(60, 60, 60))
+            draw.rectangle([icon_x, y+10, icon_x+50, y+60], fill=(60, 60, 60))
         
-        draw.text((icon_x + 80, y + 28), g.get("name", "Unknown"), fill=(240, 240, 240), font=font_game)
+        draw.text((icon_x + 65, y + 15), g.get("name", "Unknown"), fill=(240, 240, 240), font=font_game)
         
         total_t = g.get("time", "0")
         bbox = draw.textbbox((0, 0), total_t, font=font_time_game)
         tw = bbox[2] - bbox[0]
-        draw.text((width - tw - 40, y + 35), total_t, fill=(120, 120, 120), font=font_time_game)
+        draw.text((width - tw - 40, y + 20), total_t, fill=(120, 120, 120), font=font_time_game)
         
         y += game_header_height
         
@@ -623,23 +630,23 @@ async def generate_games_image(top_games_data):
             p_color = p_colors[j] if j < 2 else (100, 100, 100)
             
             rank_label = "1st" if j == 0 else "2nd"
-            draw_rounded_rect(draw, [80, y+25, 125, y+55], 6, (p_color[0], p_color[1], p_color[2], 40))
-            draw.text((88, y + 26), rank_label, fill=p_color, font=font_rank_small)
+            draw_rounded_rect(draw, [80, y+15, 125, y+45], 6, (p_color[0], p_color[1], p_color[2], 40))
+            draw.text((88, y + 16), rank_label, fill=p_color, font=font_rank_small)
             
             pl_avatar = await fetch_image(pl.get("avatar_url", ""))
             if pl_avatar:
-                pa = make_circle_avatar(pl_avatar, (60, 60))
-                img.paste(pa, (150, y + 12), pa)
+                pa = make_circle_avatar(pl_avatar, (50, 50))
+                img.paste(pa, (150, y + 5), pa)
             else:
-                draw.ellipse([150, y+12, 210, y+72], fill=(60, 60, 60))
+                draw.ellipse([150, y+5, 200, y+55], fill=(60, 60, 60))
             
             name = pl.get("name", "")
-            draw_text_fallback(draw, (235, y + 25), name, fill=(200, 200, 200), primary_font=font_player, fallback_font=font_player_fallback)
+            draw_text_fallback(draw, (220, y + 10), name, fill=(200, 200, 200), primary_font=font_player, fallback_font=font_player_fallback)
             
             pt = pl.get("time", "")
             bbox = draw.textbbox((0, 0), pt, font=font_player_time)
             ptw = bbox[2] - bbox[0]
-            draw.text((width - ptw - 40, y + 28), pt, fill=(150, 150, 150), font=font_player_time)
+            draw.text((width - ptw - 40, y + 15), pt, fill=(150, 150, 150), font=font_player_time)
             
             y += player_row_height
         
