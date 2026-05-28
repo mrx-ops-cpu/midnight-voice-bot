@@ -264,7 +264,13 @@ async def update_fame_message(guild, bot):
         "rust": "https://cdn.akamai.steamstatic.com/steam/apps/252490/header.jpg",
         "pubg: battlegrounds": "https://cdn.akamai.steamstatic.com/steam/apps/578080/header.jpg",
         "pubg": "https://cdn.akamai.steamstatic.com/steam/apps/578080/header.jpg",
-        "arena breakout: infinite": "https://cdn.akamai.steamstatic.com/steam/apps/2073620/header.jpg" 
+        "arena breakout: infinite": "https://cdn.akamai.steamstatic.com/steam/apps/2073620/header.jpg",
+        "forza horizon 6": "https://cdn.akamai.steamstatic.com/steam/apps/1551360/header.jpg",
+        "forza horizon 5": "https://cdn.akamai.steamstatic.com/steam/apps/1551360/header.jpg",
+        "visual studio code": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/Visual_Studio_Code_1.35_icon.svg/512px-Visual_Studio_Code_1.35_icon.svg.png",
+        "outplayed": "https://support.overwolf.com/hc/article_attachments/360010996179/Outplayed.png",
+        "arizona role play": "https://cdn.akamai.steamstatic.com/steam/apps/12120/header.jpg",
+        "gta san andreas": "https://cdn.akamai.steamstatic.com/steam/apps/12120/header.jpg"
     }
 
     if top_games:
