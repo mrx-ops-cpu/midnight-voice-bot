@@ -4,6 +4,7 @@ import random
 import unicodedata
 import aiohttp
 os.system('python -m playwright install chromium')
+os.system('python -m playwright install-deps chromium')
 from playwright.async_api import async_playwright
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
 from io import BytesIO
