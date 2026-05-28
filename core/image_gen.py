@@ -539,7 +539,7 @@ async def render_html_to_image(html_content, width=600):
         await page.wait_for_timeout(500) # give time for fonts/images to load
         
         # We find the body element or a specific wrapper to screenshot exactly its height
-        screenshot_bytes = await page.locator("body").screenshot(omit_background=True)
+        screenshot_bytes = await page.locator(".container").screenshot(omit_background=True)
         await browser.close()
         
     return BytesIO(screenshot_bytes)
@@ -756,17 +756,17 @@ async def generate_games_image(top_games_data, offset=0, show_header=True):
             .shield-container {{ width: 44px; height: 50px; position: relative; display: flex; justify-content: center; align-items: center; margin-right: 16px; flex-shrink: 0; }}
             .shield-svg {{ position: absolute; width: 100%; height: 100%; top: 0; left: 0; }}
             .rank-text {{ font-size: 16px; font-weight: 700; z-index: 2; margin-top: -2px; }}
-            .game-icon {{ width: 56px; height: 56px; border-radius: 10px; margin-right: 16px; flex-shrink: 0; background-color: #2a2a2a; border: 1px solid rgba(255,255,255,0.05); background-size: cover; background-position: center; }}
+            .game-icon {{ width: 64px; height: 64px; border-radius: 12px; margin-right: 18px; flex-shrink: 0; background-color: #2a2a2a; border: 1px solid rgba(255,255,255,0.05); background-size: cover; background-position: center; }}
             .game-info {{ flex: 1; display: flex; flex-direction: column; justify-content: center; }}
-            .game-title-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }}
-            .game-name {{ font-size: 17px; font-weight: 700; color: #ff7666; text-shadow: 0 0 10px rgba(255, 118, 102, 0.8), 0 0 20px rgba(255, 118, 102, 0.4); }}
-            .game-time {{ font-size: 17px; font-weight: 700; color: #f7a93b; text-shadow: 0 0 10px rgba(247, 169, 59, 0.8), 0 0 20px rgba(247, 169, 59, 0.4); }}
-            .player-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }}
+            .game-title-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }}
+            .game-name {{ font-size: 19px; font-weight: 700; color: #ff7666; text-shadow: 0 0 10px rgba(255, 118, 102, 0.8), 0 0 20px rgba(255, 118, 102, 0.4); }}
+            .game-time {{ font-size: 19px; font-weight: 700; color: #f7a93b; text-shadow: 0 0 10px rgba(247, 169, 59, 0.8), 0 0 20px rgba(247, 169, 59, 0.4); }}
+            .player-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }}
             .player-row:last-child {{ margin-bottom: 0; }}
             .player-left {{ display: flex; align-items: center; }}
-            .player-avatar {{ width: 14px; height: 14px; border-radius: 50%; background: #ccc; margin-right: 8px; background-size: cover; background-position: center; }}
-            .player-name {{ font-size: 13px; color: #c4cdd5; font-weight: 600; }}
-            .player-time {{ font-size: 13px; color: #e5c487; font-weight: 600; text-shadow: 0 0 8px rgba(229, 196, 135, 0.7); }}
+            .player-avatar {{ width: 18px; height: 18px; border-radius: 50%; background: #ccc; margin-right: 8px; background-size: cover; background-position: center; }}
+            .player-name {{ font-size: 15px; color: #c4cdd5; font-weight: 600; }}
+            .player-time {{ font-size: 15px; color: #e5c487; font-weight: 600; text-shadow: 0 0 8px rgba(229, 196, 135, 0.7); }}
             .rank-1 {{ color: #ff6633; filter: drop-shadow(0 0 6px rgba(255,102,51,0.5)); }}
             .rank-2 {{ color: #ff5522; filter: drop-shadow(0 0 6px rgba(255,85,34,0.5)); }}
             .rank-3 {{ color: #ee4411; filter: drop-shadow(0 0 6px rgba(238,68,17,0.5)); }}
