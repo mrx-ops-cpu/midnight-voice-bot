@@ -3,6 +3,7 @@ import io
 import random
 import unicodedata
 import aiohttp
+from playwright.async_api import async_playwright
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
 from io import BytesIO
 
@@ -520,397 +521,255 @@ def _draw_header_glow(draw, img, text, x, y, font, emoji_img=None, emoji_size=60
 #  VOICE IMAGE
 # ═══════════════════════════════════════════════════════════════════════════════
 
+async def render_html_to_image(html_content, width=600):
+    from io import BytesIO
+    async with async_playwright() as p:
+        browser = await p.chromium.launch()
+        # Scale 2.0 for high resolution rendering
+        page = await browser.new_page(device_scale_factor=2.0)
+        await page.set_content(html_content)
+        await page.wait_for_timeout(500) # give time for fonts/images to load
+        
+        # We find the body element or a specific wrapper to screenshot exactly its height
+        screenshot_bytes = await page.locator("body").screenshot(omit_background=True)
+        await browser.close()
+        
+    return BytesIO(screenshot_bytes)
+
 async def generate_voice_image(top_voice_data):
-    width = 1200
-    row_height = 110
-    card_gap = 16
-    header_height = 150
-
-    height = header_height + max(1, len(top_voice_data)) * (row_height + card_gap) + 30
-
-    # ── Background (purple + cyan orbs) ──
-    orbs = [
-        (-450, -350, 650, 750, 107, 33, 168, 35),
-        (600, -150, 1700, 850, 8, 145, 178, 28),
-        (200, int(height * 0.4), 900, int(height * 1.2), 80, 20, 140, 18),
-    ]
-    img = _build_background(width, height, orbs)
-    draw = ImageDraw.Draw(img)
-
-    # ── Header with glow ──
-    font_header = get_font(54, bold=True)
-    emoji_img = await fetch_image("https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/2728.png")
-    _draw_header_glow(draw, img, "ТОП VOICE (За весь час)", 130, 35, font_header, emoji_img=emoji_img)
-
-    # ── Fonts ──
-    font_name = get_font(34, bold=True)
-    font_name_fb = get_fallback_font(34)
-    font_rank = get_font(28, bold=True)
-    font_time = get_font(36, bold=True)
-    font_label = get_font(18)
-
-    # ── Overlay for cards ──
-    overlay = Image.new('RGBA', (width, height), (0, 0, 0, 0))
-    od = ImageDraw.Draw(overlay)
-
-    y = header_height
+    cards_html = ""
     for i, p in enumerate(top_voice_data):
-        c = _RANK_COLORS[i] if i < len(_RANK_COLORS) else _RANK_COLORS[-1]
-        card_x0, card_x1 = 50, width - 50
+        rank = i + 1
+        name = p.get('name', 'Unknown')
+        time = p.get('time', '0')
+        avatar = p.get('avatar_url', '') or 'https://ui-avatars.com/api/?background=random&name=' + name.replace(" ", "+")
+        
+        c_class = min(rank, 3)
+        
+        cards_html += f'''
+        <div class="card">
+            <div class="shield-container outline-{c_class}">
+                <svg class="shield-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                </svg>
+                <div class="rank-text color-{c_class}">#{rank}</div>
+            </div>
+            <div class="avatar-container"><div class="avatar-img" style="background-image: url('{avatar}');"></div></div>
+            <div class="player-info">
+                <div class="player-name">{name}</div>
+                <div class="time-box">
+                    <div class="voice-time">{time}</div>
+                    <div class="voice-sub">в голосі</div>
+                </div>
+            </div>
+        </div>
+        '''
 
-        # Glassmorphism card
-        draw_rounded_rect(od, [card_x0, y, card_x1, y + row_height], 18,
-                          fill=(255, 255, 255, 8), outline=(255, 255, 255, 25), width=1)
-
-        # Left accent bar
-        od.rectangle([card_x0, y + 14, card_x0 + 4, y + row_height - 14], fill=c)
-
-        # Rank badge (pill)
-        badge_w, badge_h = 72, 38
-        bx = card_x0 + 22
-        by = y + (row_height - badge_h) // 2
-        draw_rounded_rect(od, [bx, by, bx + badge_w, by + badge_h], 14,
-                          fill=(c[0], c[1], c[2], 35))
-        draw_rounded_rect(od, [bx, by, bx + badge_w, by + badge_h], 14,
-                          fill=None, outline=(c[0], c[1], c[2], 180), width=2)
-        rank_txt = f"#{i+1}"
-        rw = od.textlength(rank_txt, font=font_rank)
-        od.text((bx + (badge_w - rw) / 2, by + 5), rank_txt, fill=c, font=font_rank)
-
-        # Avatar (80px with colored ring)
-        ax = card_x0 + 110
-        ay = y + (row_height - 80) // 2
-        avatar_img = await fetch_image(p.get("avatar_url", ""))
-        if avatar_img:
-            avatar = make_circle_avatar(avatar_img, (80, 80), stroke_color=c, stroke_width=3)
-            overlay.paste(avatar, (ax - 3, ay - 3), avatar)
-        else:
-            od.ellipse([ax, ay, ax + 80, ay + 80], fill=(40, 45, 50))
-            od.ellipse([ax - 2, ay - 2, ax + 82, ay + 82], outline=c, width=3)
-
-        # Time value (right side, accent colored)
-        time_text = p.get("time", "0")
-        t_w = od.textlength(time_text, font=font_time)
-        tx = card_x1 - 35 - int(t_w)
-        ty = y + (row_height - 44) // 2
-        od.text((tx + 2, ty + 2), time_text, fill=(0, 0, 0, 120), font=font_time)
-        od.text((tx, ty), time_text, fill=c, font=font_time)
-        label = "в голосі"
-        lw = od.textlength(label, font=font_label)
-        od.text((tx + (t_w - lw) / 2, ty + 40), label, fill=(255, 255, 255, 60), font=font_label)
-
-        # Name (with text shadow)
-        nx = ax + 95
-        ny = y + (row_height - 38) // 2
-        name = normalize_name(p.get("name", "Unknown"))
-        name = truncate_text(od, name, font_name, tx - nx - 25)
-        draw_text_fallback(od, (nx + 2, ny + 2), name, fill=(0, 0, 0, 100),
-                           primary_font=font_name, fallback_font=font_name_fb)
-        draw_text_fallback(od, (nx, ny), name, fill=(240, 242, 248),
-                           primary_font=font_name, fallback_font=font_name_fb)
-
-        # Subtle separator between cards
-        if i < len(top_voice_data) - 1:
-            sep_y = y + row_height + card_gap // 2
-            od.line([(card_x0 + 30, sep_y), (card_x1 - 30, sep_y)],
-                    fill=(255, 255, 255, 15), width=1)
-
-        y += row_height + card_gap
-
-    img = Image.alpha_composite(img, overlay)
-
-    output = BytesIO()
-    img.save(output, format="PNG")
-    output.seek(0)
-    return output
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-#  STREAKS IMAGE
-# ═══════════════════════════════════════════════════════════════════════════════
+    html = f'''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+            body {{
+                background-color: #08070d;
+                background-image: radial-gradient(circle at 20% 40%, rgba(90, 40, 150, 0.4) 0%, transparent 50%),
+                                  radial-gradient(circle at 80% 60%, rgba(40, 120, 150, 0.4) 0%, transparent 50%);
+                font-family: 'Inter', sans-serif; color: white; padding: 30px; width: 600px; margin: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased;
+            }}
+            .header {{ text-align: center; font-size: 26px; font-weight: 900; color: #a461f5; text-shadow: 0 0 15px rgba(164, 97, 245, 0.8); margin-bottom: 25px; text-transform: uppercase; }}
+            .container {{ background: #18191c; border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 14px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }}
+            .container-top {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }}
+            .top-label {{ font-size: 14px; font-weight: 800; color: #b0b5bd; display: flex; align-items: center; gap: 8px; }}
+            .voice-btn {{ background: rgba(30, 80, 40, 0.2); border: 1px solid rgba(60, 150, 60, 0.4); color: #4ade80; padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 800; display: flex; align-items: center; gap: 6px; text-shadow: 0 0 8px rgba(74, 222, 128, 0.4); }}
+            .card {{ background: rgba(30, 32, 38, 0.6); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px; padding: 12px 18px; margin-bottom: 12px; display: flex; align-items: center; position: relative; backdrop-filter: blur(10px); }}
+            .card:last-child {{ margin-bottom: 0; }}
+            .shield-container {{ width: 38px; height: 44px; position: relative; display: flex; justify-content: center; align-items: center; margin-right: 18px; flex-shrink: 0; }}
+            .shield-svg {{ position: absolute; width: 100%; height: 100%; top: 0; left: 0; }}
+            .rank-text {{ font-size: 14px; font-weight: 800; z-index: 2; }}
+            .avatar-container {{ width: 48px; height: 48px; border-radius: 50%; position: relative; margin-right: 18px; flex-shrink: 0; border: 2px solid rgba(255,255,255,0.1); }}
+            .avatar-img {{ width: 100%; height: 100%; border-radius: 50%; background-size: cover; background-position: center; }}
+            .player-info {{ flex: 1; display: flex; justify-content: space-between; align-items: center; }}
+            .player-name {{ font-size: 16px; font-weight: 800; color: #ffffff; text-shadow: 0 0 8px rgba(255, 255, 255, 0.3); }}
+            .time-box {{ display: flex; flex-direction: column; align-items: flex-end; }}
+            .voice-time {{ font-size: 18px; font-weight: 800; color: #f7a93b; text-shadow: 0 0 10px rgba(247, 169, 59, 0.6); }}
+            .voice-sub {{ font-size: 10px; font-weight: 600; color: #8a8a93; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }}
+            .color-1 {{ color: #f6a125; }} .color-2 {{ color: #a4b4c4; }} .color-3 {{ color: #cd7f32; }}
+            .outline-1 {{ color: #f6a125; filter: drop-shadow(0 0 4px rgba(246,161,37,0.8)); }}
+            .outline-2 {{ color: #a4b4c4; filter: drop-shadow(0 0 4px rgba(164,180,196,0.8)); }}
+            .outline-3 {{ color: #cd7f32; filter: drop-shadow(0 0 4px rgba(205,127,50,0.8)); }}
+        </style>
+    </head>
+    <body>
+        <div class="header">💜 ТОП VOICE</div>
+        <div class="container">
+            <div class="container-top">
+                <div class="top-label">⬅ VOICE LEADERBOARD 💜</div>
+                <div class="voice-btn">🎙 VOICE CHAT</div>
+            </div>
+            {cards_html}
+        </div>
+    </body>
+    </html>
+    '''
+    return await render_html_to_image(html)
 
 async def generate_streaks_image(top_streaks_data):
-    width = 1200
-    row_height = 110
-    card_gap = 16
-    header_height = 150
-
-    height = header_height + max(1, len(top_streaks_data)) * (row_height + card_gap) + 30
-
-    # ── Background (amber + red orbs) ──
-    orbs = [
-        (-450, -350, 650, 750, 217, 119, 6, 32),
-        (600, -150, 1700, 850, 220, 38, 38, 25),
-        (100, int(height * 0.3), 800, int(height * 1.1), 180, 60, 10, 16),
-    ]
-    img = _build_background(width, height, orbs)
-    draw = ImageDraw.Draw(img)
-
-    # ── Header with glow ──
-    font_header = get_font(54, bold=True)
-    fire_header = await fetch_image("https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/1f525.png")
-    _draw_header_glow(draw, img, "ТОП СЕРІЇ В ВОЙСІ", 130, 35, font_header, emoji_img=fire_header)
-
-    # Fire emoji for rows
-    fire_img = await fetch_image("https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/1f525.png")
-    if fire_img:
-        fire_img = fire_img.resize((42, 42))
-
-    # ── Fonts ──
-    font_name = get_font(34, bold=True)
-    font_name_fb = get_fallback_font(34)
-    font_rank = get_font(28, bold=True)
-    font_streak = get_font(40, bold=True)
-    font_label = get_font(18)
-
-    # ── Overlay ──
-    overlay = Image.new('RGBA', (width, height), (0, 0, 0, 0))
-    od = ImageDraw.Draw(overlay)
-
-    y = header_height
+    cards_html = ""
     for i, p in enumerate(top_streaks_data):
-        c = _RANK_COLORS[i] if i < len(_RANK_COLORS) else _RANK_COLORS[-1]
-        card_x0, card_x1 = 50, width - 50
+        rank = i + 1
+        name = p.get('name', 'Unknown')
+        time = p.get('streak', '0')
+        avatar = p.get('avatar_url', '') or 'https://ui-avatars.com/api/?background=random&name=' + name.replace(" ", "+")
+        
+        c_class = min(rank, 3)
+        
+        cards_html += f'''
+        <div class="card card-{c_class}">
+            <div class="shield-container outline-{c_class}">
+                <svg class="shield-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                </svg>
+                <div class="rank-text color-{c_class}">#{rank}</div>
+            </div>
+            <div class="avatar-container avatar-{c_class}"><div class="avatar-img" style="background-image: url('{avatar}');"></div></div>
+            <div class="player-info">
+                <div class="player-name">{name} 🔥</div>
+                <div class="streak-time">{time}</div>
+            </div>
+        </div>
+        '''
 
-        # Glassmorphism card
-        draw_rounded_rect(od, [card_x0, y, card_x1, y + row_height], 18,
-                          fill=(255, 255, 255, 8), outline=(255, 255, 255, 25), width=1)
-
-        # Left accent bar
-        od.rectangle([card_x0, y + 14, card_x0 + 4, y + row_height - 14], fill=c)
-
-        # Rank badge (pill)
-        badge_w, badge_h = 72, 38
-        bx = card_x0 + 22
-        by = y + (row_height - badge_h) // 2
-        draw_rounded_rect(od, [bx, by, bx + badge_w, by + badge_h], 14,
-                          fill=(c[0], c[1], c[2], 35))
-        draw_rounded_rect(od, [bx, by, bx + badge_w, by + badge_h], 14,
-                          fill=None, outline=(c[0], c[1], c[2], 180), width=2)
-        rank_txt = f"#{i+1}"
-        rw = od.textlength(rank_txt, font=font_rank)
-        od.text((bx + (badge_w - rw) / 2, by + 5), rank_txt, fill=c, font=font_rank)
-
-        # Avatar
-        ax = card_x0 + 110
-        ay = y + (row_height - 80) // 2
-        avatar_img = await fetch_image(p.get("avatar_url", ""))
-        if avatar_img:
-            avatar = make_circle_avatar(avatar_img, (80, 80), stroke_color=c, stroke_width=3)
-            overlay.paste(avatar, (ax - 3, ay - 3), avatar)
-        else:
-            od.ellipse([ax, ay, ax + 80, ay + 80], fill=(40, 45, 50))
-            od.ellipse([ax - 2, ay - 2, ax + 82, ay + 82], outline=c, width=3)
-
-        # Streak value (right side) — orange accent
-        streak_txt = p.get("streak", "0")
-        s_w = od.textlength(streak_txt, font=font_streak)
-        tx = card_x1 - 35 - int(s_w)
-        ty = y + (row_height - 50) // 2
-        od.text((tx + 2, ty + 2), streak_txt, fill=(0, 0, 0, 120), font=font_streak)
-        od.text((tx, ty), streak_txt, fill=(255, 140, 40), font=font_streak)
-        label = "серія"
-        lw = od.textlength(label, font=font_label)
-        od.text((tx + (s_w - lw) / 2, ty + 44), label, fill=(255, 255, 255, 60), font=font_label)
-
-        # Fire emoji next to streak
-        if fire_img:
-            overlay.paste(fire_img, (int(tx - 52), int(ty + 2)), fire_img)
-
-        # Name (with text shadow)
-        nx = ax + 95
-        ny = y + (row_height - 38) // 2
-        name = normalize_name(p.get("name", "Unknown"))
-        max_name_w = (tx - 52 if fire_img else tx) - nx - 20
-        name = truncate_text(od, name, font_name, max_name_w)
-        draw_text_fallback(od, (nx + 2, ny + 2), name, fill=(0, 0, 0, 100),
-                           primary_font=font_name, fallback_font=font_name_fb)
-        draw_text_fallback(od, (nx, ny), name, fill=(240, 242, 248),
-                           primary_font=font_name, fallback_font=font_name_fb)
-
-        # Separator
-        if i < len(top_streaks_data) - 1:
-            sep_y = y + row_height + card_gap // 2
-            od.line([(card_x0 + 30, sep_y), (card_x1 - 30, sep_y)],
-                    fill=(255, 255, 255, 15), width=1)
-
-        y += row_height + card_gap
-
-    img = Image.alpha_composite(img, overlay)
-
-    output = BytesIO()
-    img.save(output, format="PNG")
-    output.seek(0)
-    return output
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-#  GAMES IMAGE
-# ═══════════════════════════════════════════════════════════════════════════════
+    html = f'''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+            body {{
+                background-color: #0d0a0a;
+                background-image: radial-gradient(circle at center, rgba(150, 40, 0, 0.4) 0%, transparent 60%);
+                font-family: 'Inter', sans-serif; color: white; padding: 30px; width: 600px; margin: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased;
+            }}
+            .header {{ text-align: center; font-size: 26px; font-weight: 900; color: #ff9a44; text-shadow: 0 0 15px rgba(255, 120, 0, 0.8); margin-bottom: 25px; text-transform: uppercase; }}
+            .container {{ background: #18191c; border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 14px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }}
+            .container-top {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }}
+            .top-label {{ font-size: 14px; font-weight: 800; color: #b0b5bd; display: flex; align-items: center; gap: 8px; }}
+            .voice-btn {{ background: rgba(30, 80, 40, 0.2); border: 1px solid rgba(60, 150, 60, 0.4); color: #4ade80; padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 800; display: flex; align-items: center; gap: 6px; text-shadow: 0 0 8px rgba(74, 222, 128, 0.4); }}
+            .card {{ background: #252321; border-radius: 12px; padding: 12px 18px; margin-bottom: 12px; display: flex; align-items: center; position: relative; }}
+            .card:last-child {{ margin-bottom: 0; }}
+            .card-1 {{ border: 2px solid #f6a125; box-shadow: 0 0 15px rgba(246,161,37,0.4), inset 0 0 10px rgba(246,161,37,0.2); background: rgba(45, 35, 25, 0.8); }}
+            .card-2 {{ border: 2px solid #57a6e5; box-shadow: 0 0 15px rgba(87,166,229,0.4), inset 0 0 10px rgba(87,166,229,0.2); background: rgba(25, 35, 45, 0.8); }}
+            .card-3 {{ border: 2px solid #e55757; box-shadow: 0 0 15px rgba(229,87,87,0.4), inset 0 0 10px rgba(229,87,87,0.2); background: rgba(45, 25, 25, 0.8); }}
+            .shield-container {{ width: 38px; height: 44px; position: relative; display: flex; justify-content: center; align-items: center; margin-right: 18px; flex-shrink: 0; }}
+            .shield-svg {{ position: absolute; width: 100%; height: 100%; top: 0; left: 0; }}
+            .rank-text {{ font-size: 14px; font-weight: 800; z-index: 2; }}
+            .avatar-container {{ width: 48px; height: 48px; border-radius: 50%; position: relative; margin-right: 18px; flex-shrink: 0; }}
+            .avatar-img {{ width: 100%; height: 100%; border-radius: 50%; background-size: cover; background-position: center; }}
+            .avatar-1 {{ box-shadow: 0 0 12px #f6a125; border: 2px solid #f6a125; }} .avatar-2 {{ box-shadow: 0 0 12px #57a6e5; border: 2px solid #57a6e5; }} .avatar-3 {{ box-shadow: 0 0 12px #e55757; border: 2px solid #e55757; }}
+            .player-info {{ flex: 1; display: flex; justify-content: space-between; align-items: center; }}
+            .player-name {{ font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 6px; color: #ffffff; text-transform: uppercase; text-shadow: 0 0 8px rgba(255, 255, 255, 0.3);}}
+            .streak-time {{ font-size: 16px; font-weight: 800; color: #f6a125; text-shadow: 0 0 10px rgba(246, 161, 37, 0.6); text-transform: uppercase; }}
+            .color-1 {{ color: #f6a125; }} .color-2 {{ color: #57a6e5; }} .color-3 {{ color: #e55757; }}
+            .outline-1 {{ color: #f6a125; filter: drop-shadow(0 0 4px rgba(246,161,37,0.8)); }} .outline-2 {{ color: #57a6e5; filter: drop-shadow(0 0 4px rgba(87,166,229,0.8)); }} .outline-3 {{ color: #e55757; filter: drop-shadow(0 0 4px rgba(229,87,87,0.8)); }}
+        </style>
+    </head>
+    <body>
+        <div class="header">🔥 ТОП СЕРІЇ В ВОЙСІ</div>
+        <div class="container">
+            <div class="container-top">
+                <div class="top-label">⬅ TOP STREAKS 🔥</div>
+                <div class="voice-btn">🎙 VOICE CHAT</div>
+            </div>
+            {cards_html}
+        </div>
+    </body>
+    </html>
+    '''
+    return await render_html_to_image(html)
 
 async def generate_games_image(top_games_data, offset=0, show_header=True):
-    width = 1200
-    total_h = 1180
-
-    # ── Background (crimson + orange orbs) ──
-    orbs = [
-        (-350, -250, 550, 600, 190, 18, 60, 32),
-        (500, -120, 1400, 750, 234, 88, 12, 25),
-        (200, 500, 1000, 1200, 160, 30, 50, 18),
-    ]
-    img = _build_background(width, total_h, orbs)
-    draw = ImageDraw.Draw(img)
-
-    # ── Header ──
-    font_header = get_font(54, bold=True)
-    if show_header:
-        game_emoji = await fetch_image("https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/1f3ae.png")
-        _draw_header_glow(draw, img, "ТОП ІГОР (За весь час)", 130, 35, font_header, emoji_img=game_emoji)
-
-    # ── Fonts ──
-    font_game = get_font(32, bold=True)
-    font_game_fb = get_fallback_font(32)
-    font_time_total = get_font(30, bold=True)
-    font_player = get_font(26)
-    font_player_fb = get_fallback_font(26)
-    font_player_time = get_font(26, bold=True)
-    font_rank = get_font(24, bold=True)
-    font_player_rank = get_font(20, bold=True)
-
-    # ── Overlay ──
-    overlay = Image.new('RGBA', (width, total_h), (0, 0, 0, 0))
-    od = ImageDraw.Draw(overlay)
-
-    y = 120 if show_header else 30
-    card_x0, card_x1 = 40, width - 40
-
+    cards_html = ""
     for i, g in enumerate(top_games_data):
-        players = g.get("players", [])
-        game_header_h = 65
-        player_row_h = 52
-        card_h = game_header_h + len(players) * player_row_h + 12
-
         rank = i + 1 + offset
-        c = _RANK_COLORS[min(rank - 1, len(_RANK_COLORS) - 1)] if rank <= 3 else _RANK_COLORS[-1]
+        g_name = g.get('name', 'Unknown')
+        g_time = g.get('time', '0 h')
+        g_icon = g.get('icon_url', '') or 'https://via.placeholder.com/56x56/2a2a2a/2a2a2a'
+        c_class = min(rank, 5)
+        
+        players_html = ""
+        for pl in g.get('players', []):
+            p_name = pl.get('name', '')
+            p_time = pl.get('time', '')
+            p_av = pl.get('avatar_url', '') or 'https://ui-avatars.com/api/?background=random&name=' + p_name.replace(" ", "+")
+            
+            players_html += f'''
+            <div class="player-row">
+                <div class="player-left"><div class="player-avatar" style="background-image: url('{p_av}');"></div><div class="player-name">{p_name}</div></div>
+                <div class="player-time">{p_time}</div>
+            </div>
+            '''
 
-        # Glassmorphism card
-        draw_rounded_rect(od, [card_x0, y, card_x1, y + card_h], 16,
-                          fill=(255, 255, 255, 8), outline=(255, 255, 255, 20), width=1)
+        cards_html += f'''
+        <div class="card">
+            <div class="shield-container rank-{c_class}">
+                <svg class="shield-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                </svg>
+                <div class="rank-text">#{rank}</div>
+            </div>
+            <div class="game-icon" style="background-image: url('{g_icon}');"></div>
+            <div class="game-info">
+                <div class="game-title-row">
+                    <div class="game-name">{g_name}</div>
+                    <div class="game-time">{g_time}</div>
+                </div>
+                {players_html}
+            </div>
+        </div>
+        '''
 
-        # Left accent bar
-        od.rectangle([card_x0, y + 12, card_x0 + 4, y + card_h - 12], fill=c)
+    header_html = '<div class="header">ТОП ІГОР (За весь час)</div>' if show_header else ''
 
-        # Rank badge
-        badge_w, badge_h = 64, 34
-        bx = card_x0 + 18
-        by = y + 16
-        draw_rounded_rect(od, [bx, by, bx + badge_w, by + badge_h], 12,
-                          fill=(c[0], c[1], c[2], 35))
-        draw_rounded_rect(od, [bx, by, bx + badge_w, by + badge_h], 12,
-                          fill=None, outline=(c[0], c[1], c[2], 180), width=2)
-        r_txt = f"#{rank}"
-        rw = od.textlength(r_txt, font=font_rank)
-        od.text((bx + (badge_w - rw) / 2, by + 5), r_txt, fill=c, font=font_rank)
-
-        # Game icon
-        icon_x, icon_y = card_x0 + 100, y + 13
-        icon_w, icon_h = 80, 40
-        icon_url = g.get("icon_url", "")
-        if icon_url:
-            icon_img = await fetch_image(icon_url)
-            if icon_img:
-                icon_img = ImageOps.fit(icon_img, (icon_w, icon_h))
-                mask = Image.new('L', (icon_w, icon_h), 0)
-                draw_mask = ImageDraw.Draw(mask)
-                draw_rounded_rect(draw_mask, [0, 0, icon_w, icon_h], 8, fill=255)
-                icon_rounded = Image.new('RGBA', (icon_w, icon_h), (0, 0, 0, 0))
-                icon_rounded.paste(icon_img, (0, 0), mask=mask)
-                overlay.paste(icon_rounded, (icon_x, icon_y), icon_rounded)
-            else:
-                draw_rounded_rect(od, [icon_x, icon_y, icon_x + icon_w, icon_y + icon_h], 8, fill=(60, 60, 60))
-        else:
-            draw_rounded_rect(od, [icon_x, icon_y, icon_x + icon_w, icon_y + icon_h], 8, fill=(60, 60, 60))
-
-        # Total time (right side, warm amber)
-        total_t = g.get("time", "0")
-        ttw = od.textlength(total_t, font=font_time_total)
-        ttx = card_x1 - 30 - int(ttw)
-        tty = y + 18
-        od.text((ttx + 2, tty + 2), total_t, fill=(0, 0, 0, 100), font=font_time_total)
-        od.text((ttx, tty), total_t, fill=(255, 175, 55), font=font_time_total)
-
-        # Game name (soft coral red)
-        gnx = icon_x + icon_w + 18
-        gny = y + 18
-        gname = g.get("name", "Unknown")
-        gname = truncate_text(od, gname, font_game, ttx - gnx - 20)
-        draw_text_fallback(od, (gnx + 2, gny + 2), gname, fill=(0, 0, 0, 100),
-                           primary_font=font_game, fallback_font=font_game_fb)
-        draw_text_fallback(od, (gnx, gny), gname, fill=(255, 100, 110),
-                           primary_font=font_game, fallback_font=font_game_fb)
-
-        # Thin divider between game header and player rows
-        div_y = y + game_header_h - 4
-        od.line([(card_x0 + 20, div_y), (card_x1 - 20, div_y)],
-                fill=(255, 255, 255, 25), width=1)
-
-        # ── Player sub-rows ──
-        py = y + game_header_h + 4
-        medal_labels = ["\U0001f947", "\U0001f948"]  # 🥇 🥈
-
-        for j, pl in enumerate(players):
-            pc = _RANK_COLORS[j] if j < 2 else _RANK_COLORS[-1]
-
-            # Sub-row background
-            draw_rounded_rect(od, [card_x0 + 14, py, card_x1 - 14, py + player_row_h - 4], 10,
-                              fill=(0, 0, 0, 50))
-
-            # Rank label (medal emoji or #N)
-            rank_label = medal_labels[j] if j < len(medal_labels) else f"#{j+1}"
-            rl_w = od.textlength(rank_label, font=font_player_rank)
-            pbx = card_x0 + 28
-            pby = py + 8
-            p_badge_w = max(50, int(rl_w) + 20)
-            p_badge_h = player_row_h - 16
-            draw_rounded_rect(od, [pbx, pby, pbx + p_badge_w, pby + p_badge_h], 8,
-                              fill=(pc[0], pc[1], pc[2], 30))
-            od.text((pbx + (p_badge_w - rl_w) / 2, pby + 4), rank_label, fill=pc, font=font_player_rank)
-
-            # Player avatar
-            pax = pbx + p_badge_w + 14
-            pay = py + (player_row_h - 40) // 2
-            p_av = await fetch_image(pl.get("avatar_url", ""))
-            if p_av:
-                p_av = make_circle_avatar(p_av, (36, 36))
-                overlay.paste(p_av, (pax, pay), p_av)
-            else:
-                od.ellipse([pax, pay, pax + 36, pay + 36], fill=(60, 60, 60))
-
-            # Player time (right, warm amber)
-            pt = pl.get("time", "")
-            pt_w = od.textlength(pt, font=font_player_time)
-            ptx = card_x1 - 40 - int(pt_w)
-            pty = py + (player_row_h - 30) // 2
-            od.text((ptx + 1, pty + 1), pt, fill=(0, 0, 0, 80), font=font_player_time)
-            od.text((ptx, pty), pt, fill=(255, 175, 55), font=font_player_time)
-
-            # Player name
-            pnx = pax + 48
-            pny = py + (player_row_h - 30) // 2
-            pname = normalize_name(pl.get("name", ""))
-            pname = truncate_text(od, pname, font_player, ptx - pnx - 20)
-            draw_text_fallback(od, (pnx + 1, pny + 1), pname, fill=(0, 0, 0, 80),
-                               primary_font=font_player, fallback_font=font_player_fb)
-            draw_text_fallback(od, (pnx, pny), pname, fill=(225, 228, 235),
-                               primary_font=font_player, fallback_font=font_player_fb)
-
-            py += player_row_h
-
-        y += card_h + 14
-
-    img = Image.alpha_composite(img, overlay)
-
-    output = BytesIO()
-    img.save(output, format="PNG")
-    output.seek(0)
-    return output
+    html = f'''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+            body {{
+                background-color: #0f0a0a;
+                background-image: radial-gradient(circle at 10% 50%, rgba(100, 20, 20, 0.8) 0%, transparent 50%),
+                                  radial-gradient(circle at 90% 80%, rgba(150, 30, 20, 0.6) 0%, transparent 40%);
+                font-family: 'Inter', sans-serif; color: white; padding: 30px; width: 580px; margin: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased;
+            }}
+            .header {{ text-align: center; font-size: 22px; font-weight: 800; color: #ff9a85; text-shadow: 0 0 15px rgba(255, 60, 0, 0.8); margin-bottom: 25px; text-transform: uppercase; }}
+            .card {{ background: rgba(30, 32, 38, 0.6); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; display: flex; align-items: center; backdrop-filter: blur(10px); box-shadow: 0 4px 15px rgba(0,0,0,0.4); }}
+            .shield-container {{ width: 44px; height: 50px; position: relative; display: flex; justify-content: center; align-items: center; margin-right: 16px; flex-shrink: 0; }}
+            .shield-svg {{ position: absolute; width: 100%; height: 100%; top: 0; left: 0; }}
+            .rank-text {{ font-size: 16px; font-weight: 700; z-index: 2; margin-top: -2px; }}
+            .game-icon {{ width: 56px; height: 56px; border-radius: 10px; margin-right: 16px; flex-shrink: 0; background-color: #2a2a2a; border: 1px solid rgba(255,255,255,0.05); background-size: cover; background-position: center; }}
+            .game-info {{ flex: 1; display: flex; flex-direction: column; justify-content: center; }}
+            .game-title-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }}
+            .game-name {{ font-size: 17px; font-weight: 700; color: #ff7666; text-shadow: 0 0 10px rgba(255, 118, 102, 0.8), 0 0 20px rgba(255, 118, 102, 0.4); }}
+            .game-time {{ font-size: 17px; font-weight: 700; color: #f7a93b; text-shadow: 0 0 10px rgba(247, 169, 59, 0.8), 0 0 20px rgba(247, 169, 59, 0.4); }}
+            .player-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }}
+            .player-row:last-child {{ margin-bottom: 0; }}
+            .player-left {{ display: flex; align-items: center; }}
+            .player-avatar {{ width: 14px; height: 14px; border-radius: 50%; background: #ccc; margin-right: 8px; background-size: cover; background-position: center; }}
+            .player-name {{ font-size: 13px; color: #c4cdd5; font-weight: 600; }}
+            .player-time {{ font-size: 13px; color: #e5c487; font-weight: 600; text-shadow: 0 0 8px rgba(229, 196, 135, 0.7); }}
+            .rank-1 {{ color: #ff6633; filter: drop-shadow(0 0 6px rgba(255,102,51,0.5)); }}
+            .rank-2 {{ color: #ff5522; filter: drop-shadow(0 0 6px rgba(255,85,34,0.5)); }}
+            .rank-3 {{ color: #ee4411; filter: drop-shadow(0 0 6px rgba(238,68,17,0.5)); }}
+            .rank-4 {{ color: #dd3300; filter: drop-shadow(0 0 6px rgba(221,51,0,0.5)); }}
+            .rank-5 {{ color: #cc2200; filter: drop-shadow(0 0 6px rgba(204,34,0,0.5)); }}
+        </style>
+    </head>
+    <body>
+        {header_html}
+        {cards_html}
+    </body>
+    </html>
+    '''
+    return await render_html_to_image(html, width=580)

@@ -313,13 +313,13 @@ async def update_fame_message(guild, bot):
     voice_file = discord.File(await image_gen.generate_voice_image(top_voice_data), filename="fame_voice.png")
     streaks_file = discord.File(await image_gen.generate_streaks_image(top_streaks_data), filename="fame_streaks.png")
     
-    games_part1 = top_games_data[:5]
-    games_part2 = top_games_data[5:10]
+    games_part1 = top_games_data[:4]
+    games_part2 = top_games_data[4:8]
     
     games_file1 = discord.File(await image_gen.generate_games_image(games_part1, offset=0, show_header=True), filename="fame_games_1.png")
     games_file2 = None
     if games_part2:
-        games_file2 = discord.File(await image_gen.generate_games_image(games_part2, offset=5, show_header=False), filename="fame_games_2.png")
+        games_file2 = discord.File(await image_gen.generate_games_image(games_part2, offset=4, show_header=False), filename="fame_games_2.png")
 
     # Hashes (serialize data dicts to check for changes)
     def hash_data(d): return hashlib.md5(json.dumps(d, sort_keys=True).encode('utf-8')).hexdigest()
