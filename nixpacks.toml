@@ -1,8 +1,5 @@
-[variables]
-PLAYWRIGHT_BROWSERS_PATH = "0"
-
 [phases.setup]
-nixPkgs = ["...", "ffmpeg", "chromium"]
+nixPkgs = ["...", "ffmpeg"]
 
-[phases.install]
-cmds = ["...", "playwright install chromium"]
+[start]
+cmd = "playwright install chromium && python main.py"
