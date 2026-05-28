@@ -79,6 +79,14 @@ def draw_rounded_rect(draw, coords, radius, fill, outline=None, width=1):
         draw.line([x0, y0+radius, x0, y1-radius], fill=outline, width=width)
         draw.line([x1, y0+radius, x1, y1-radius], fill=outline, width=width)
 
+def truncate_text(draw, text, font, max_width):
+    if max_width <= 0: return ""
+    if draw.textlength(text, font=font) <= max_width:
+        return text
+    while len(text) > 0 and draw.textlength(text + "...", font=font) > max_width:
+        text = text[:-1]
+    return text + "..."
+
 def apply_background(width, height):
     # Pure FaceIT dark background
     return Image.new("RGBA", (width, height), (22, 25, 27, 255))
@@ -509,14 +517,17 @@ async def generate_voice_image(top_voice_data):
             overlay_draw.ellipse([ax, ay, ax+70, ay+70], fill=(40, 45, 50))
             overlay_draw.ellipse([ax-2, ay-2, ax+72, ay+72], outline=c, width=2)
             
-        name = p.get("name", "Unknown")
-        nx, ny = 250, y + 25
-        draw_text_fallback(overlay_draw, (nx+2, ny+2), name, fill=(0,0,0,150), primary_font=font_name, fallback_font=font_name_fallback)
-        draw_text_fallback(overlay_draw, (nx, ny), name, fill=(240, 240, 245), primary_font=font_name, fallback_font=font_name_fallback)
-        
         time_text = p.get("time", "0")
         t_w = overlay_draw.textlength(time_text, font=font_time)
         tx, ty = width - 60 - t_w, y + 25
+        
+        nx, ny = 250, y + 25
+        name = p.get("name", "Unknown")
+        name = truncate_text(overlay_draw, name, font_name, tx - nx - 20)
+        
+        draw_text_fallback(overlay_draw, (nx+2, ny+2), name, fill=(0,0,0,150), primary_font=font_name, fallback_font=font_name_fallback)
+        draw_text_fallback(overlay_draw, (nx, ny), name, fill=(240, 240, 245), primary_font=font_name, fallback_font=font_name_fallback)
+        
         overlay_draw.text((tx+2, ty+2), time_text, fill=(0,0,0,150), font=font_time)
         overlay_draw.text((tx, ty), time_text, fill=c, font=font_time)
         
@@ -593,20 +604,23 @@ async def generate_streaks_image(top_streaks_data):
             overlay_draw.ellipse([ax, ay, ax+70, ay+70], fill=(40, 45, 50))
             overlay_draw.ellipse([ax-2, ay-2, ax+72, ay+72], outline=c, width=2)
             
-        name = p.get("name", "Unknown")
+        streak_txt = p.get("streak", "0")
+        s_w = overlay_draw.textlength(streak_txt, font=font_streak)
+        tx, ty = width - 80 - s_w, y + 25
+        
+        # Fire emoji
+        if fire_img:
+            overlay.paste(fire_img, (int(tx - 55), int(ty - 5)), fire_img)
+            
         nx, ny = 250, y + 25
+        name = p.get("name", "Unknown")
+        name = truncate_text(overlay_draw, name, font_name, tx - 55 - nx - 10)
+        
         draw_text_fallback(overlay_draw, (nx+2, ny+2), name, fill=(0,0,0,150), primary_font=font_name, fallback_font=font_name_fallback)
         draw_text_fallback(overlay_draw, (nx, ny), name, fill=(240, 240, 245), primary_font=font_name, fallback_font=font_name_fallback)
         
-        streak_text = p.get("streak", "0")
-        t_w = overlay_draw.textlength(streak_text, font=font_streak)
-        tx, ty = width - 60 - t_w, y + 25
-        
-        if fire_img:
-            overlay.paste(fire_img, (int(tx - 55), int(y + 25)), fire_img)
-            
-        overlay_draw.text((tx+2, ty+2), streak_text, fill=(0,0,0,150), font=font_streak)
-        overlay_draw.text((tx, ty), streak_text, fill=(255, 120, 0), font=font_streak)
+        overlay_draw.text((tx+2, ty+2), streak_txt, fill=(0,0,0,150), font=font_streak)
+        overlay_draw.text((tx, ty), streak_txt, fill=(255, 120, 0), font=font_streak)
         
         y += row_height + 20
         
@@ -619,15 +633,7 @@ async def generate_streaks_image(top_streaks_data):
 
 async def generate_games_image(top_games_data, offset=0, show_header=True):
     width = 1000
-    game_header_height = 70
-    player_row_height = 55
-    header_height = 120 if show_header else 30
-    
-    total_h = header_height
-    for g in top_games_data:
-        total_h += 100 + len(g.get("players", [])) * 70 + 30
-    if not top_games_data:
-        total_h += 150
+    total_h = 1000 # Hardcode height so both images are identical in size!
         
     img = Image.new('RGBA', (width, total_h), (10, 12, 16, 255))
     
@@ -638,15 +644,14 @@ async def generate_games_image(top_games_data, offset=0, show_header=True):
     
     draw = ImageDraw.Draw(img)
     
-    font_header = get_font(42, bold=True)
-    font_game = get_font(42, bold=True)
-    font_game_fallback = get_fallback_font(42)
-    font_time_game = get_font(42, bold=True)
-    font_player = get_font(34, bold=True)
+    font_header = get_font(52, bold=True)
+    font_game = get_font(46, bold=True)
+    font_game_fallback = get_fallback_font(46)
+    font_time_game = get_font(40, bold=True)
+    font_player = get_font(34)
     font_player_fallback = get_fallback_font(34)
     font_player_time = get_font(34, bold=True)
-    font_rank = get_font(32, bold=True)
-    font_rank_small = get_font(26, bold=True)
+    font_rank_small = get_font(28, bold=True)
     
     if show_header:
         game_emoji = await fetch_image("https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/1f3ae.png")
@@ -662,93 +667,97 @@ async def generate_games_image(top_games_data, offset=0, show_header=True):
     overlay = Image.new('RGBA', (width, total_h), (0,0,0,0))
     overlay_draw = ImageDraw.Draw(overlay)
     
-    y = header_height
+    y = 110 if show_header else 40
+    
     for i, g in enumerate(top_games_data):
-        rank_idx = i + offset
-        c = medal_colors[rank_idx] if rank_idx < 3 else (200, 200, 200)
+        players = g.get("players", [])
         
-        card_h = 100 + len(g.get("players", [])) * 70
-        row_bg = (20, 25, 30, 140)
-        row_outline = (c[0], c[1], c[2], 120)
-        draw_rounded_rect(overlay_draw, [40, y, width - 40, y + card_h], 20, fill=row_bg, outline=row_outline, width=2)
+        # Make the card height more compact!
+        card_h = 75 + len(players) * 60
         
-        badge_w = 70
-        badge_h = 45
-        bx, by = 60, y + 25
-        draw_rounded_rect(overlay_draw, [bx, by, bx + badge_w, by + badge_h], 15, fill=(c[0], c[1], c[2], 30), outline=c, width=2)
-        r_w = overlay_draw.textlength(f"#{rank_idx+1}", font=font_rank)
-        overlay_draw.text((bx + (badge_w - r_w) // 2, by + 4), f"#{rank_idx+1}", fill=c, font=font_rank)
+        draw_rounded_rect(overlay_draw, [40, y, width - 40, y + card_h], 20, fill=(20, 25, 30, 140), outline=(255, 80, 80, 80), width=2)
         
-        icon_x, icon_y = 150, y + 20
+        rank = i + 1 + offset
+        c = medal_colors[i] if rank <= 3 else (150, 150, 150)
+        
+        draw_rounded_rect(overlay_draw, [60, y + 15, 110, y + 45], 10, fill=(c[0], c[1], c[2], 40), outline=c, width=1)
+        r_txt = f"#{rank}"
+        rw = overlay_draw.textlength(r_txt, font=font_rank_small)
+        overlay_draw.text((60 + (50 - rw) // 2, y + 17), r_txt, fill=c, font=font_rank_small)
+        
+        icon_x, icon_y = 125, y + 12
         icon_url = g.get("icon_url", "")
         if icon_url:
             icon_img = await fetch_image(icon_url)
             if icon_img:
-                icon_img = icon_img.resize((100, 50))
-                mask = Image.new('L', (100, 50), 0)
+                icon_img = ImageOps.fit(icon_img, (80, 40))
+                mask = Image.new('L', (80, 40), 0)
                 draw_mask = ImageDraw.Draw(mask)
-                draw_rounded_rect(draw_mask, [0, 0, 100, 50], 10, fill=255)
-                icon_rounded = Image.new('RGBA', (100, 50), (0,0,0,0))
+                draw_rounded_rect(draw_mask, [0, 0, 80, 40], 8, fill=255)
+                icon_rounded = Image.new('RGBA', (80, 40), (0,0,0,0))
                 icon_rounded.paste(icon_img, (0,0), mask=mask)
                 overlay.paste(icon_rounded, (icon_x, icon_y), icon_rounded)
             else:
-                draw_rounded_rect(overlay_draw, [icon_x, icon_y, icon_x+100, icon_y+50], 10, fill=(60, 60, 60))
+                draw_rounded_rect(overlay_draw, [icon_x, icon_y, icon_x+80, icon_y+40], 8, fill=(60, 60, 60))
         else:
-            draw_rounded_rect(overlay_draw, [icon_x, icon_y, icon_x+100, icon_y+50], 10, fill=(60, 60, 60))
+            draw_rounded_rect(overlay_draw, [icon_x, icon_y, icon_x+80, icon_y+40], 8, fill=(60, 60, 60))
             
-        nx, ny = 270, y + 22
+        total_t = g.get("time", "0")
+        t_w = overlay_draw.textlength(total_t, font=font_time_game)
+        tx, ty = width - 60 - t_w, y + 14
+        
+        nx, ny = 220, y + 12
         name = g.get("name", "Unknown")
+        name = truncate_text(overlay_draw, name, font_game, tx - nx - 20)
         draw_text_fallback(overlay_draw, (nx+2, ny+2), name, fill=(0,0,0,150), primary_font=font_game, fallback_font=font_game_fallback)
         draw_text_fallback(overlay_draw, (nx, ny), name, fill=(255, 80, 80), primary_font=font_game, fallback_font=font_game_fallback)
         
-        total_t = g.get("time", "0")
-        t_w = overlay_draw.textlength(total_t, font=font_time_game)
-        tx, ty = width - 60 - t_w, y + 22
         overlay_draw.text((tx+2, ty+2), total_t, fill=(0,0,0,150), font=font_time_game)
         overlay_draw.text((tx, ty), total_t, fill=(255, 150, 50), font=font_time_game)
         
-        overlay_draw.line([60, y + 90, width - 60, y + 90], fill=(255, 255, 255, 30), width=2)
+        overlay_draw.line([60, y + 65, width - 60, y + 65], fill=(255, 255, 255, 30), width=2)
         
-        py = y + 105
+        py = y + 75
         
-        players = g.get("players", [])
         for j, pl in enumerate(players):
             p_colors = [(255, 215, 0), (192, 192, 192)]
             pc = p_colors[j] if j < 2 else (100, 100, 100)
             
-            draw_rounded_rect(overlay_draw, [60, py, width - 60, py + 55], 15, fill=(0, 0, 0, 80))
+            draw_rounded_rect(overlay_draw, [60, py, width - 60, py + 50], 12, fill=(0, 0, 0, 80))
             
             rank_label = "1st" if j == 0 else "2nd"
-            p_badge_w = 55
-            p_badge_h = 35
+            p_badge_w = 45
+            p_badge_h = 30
             pbx, pby = 80, py + 10
-            draw_rounded_rect(overlay_draw, [pbx, pby, pbx + p_badge_w, pby + p_badge_h], 10, fill=(pc[0], pc[1], pc[2], 40))
+            draw_rounded_rect(overlay_draw, [pbx, pby, pbx + p_badge_w, pby + p_badge_h], 8, fill=(pc[0], pc[1], pc[2], 40))
             pr_w = overlay_draw.textlength(rank_label, font=font_rank_small)
-            overlay_draw.text((pbx + (p_badge_w - pr_w) // 2, pby + 4), rank_label, fill=pc, font=font_rank_small)
+            overlay_draw.text((pbx + (p_badge_w - pr_w) // 2, pby + 2), rank_label, fill=pc, font=font_rank_small)
             
-            pax, pay = 150, py + 5
+            pax, pay = 140, py + 5
             p_av = await fetch_image(pl.get("avatar_url", ""))
             if p_av:
-                p_av = make_circle_avatar(p_av, (45, 45))
+                p_av = make_circle_avatar(p_av, (40, 40))
                 overlay.paste(p_av, (pax, pay), p_av)
             else:
-                overlay_draw.ellipse([pax, pay, pax+45, pay+45], fill=(60, 60, 60))
-            
-            pnx, pny = 210, py + 10
-            pname = pl.get("name", "")
-            draw_text_fallback(overlay_draw, (pnx, pny), pname, fill=(220, 220, 225), primary_font=font_player, fallback_font=font_player_fallback)
+                overlay_draw.ellipse([pax, pay, pax+40, pay+40], fill=(60, 60, 60))
             
             pt = pl.get("time", "")
             pt_w = overlay_draw.textlength(pt, font=font_player_time)
-            ptx, pty = width - 80 - pt_w, py + 10
+            ptx, pty = width - 80 - pt_w, py + 8
+            
+            pnx, pny = 195, py + 6
+            pname = pl.get("name", "")
+            pname = truncate_text(overlay_draw, pname, font_player, ptx - pnx - 20)
+            draw_text_fallback(overlay_draw, (pnx, pny), pname, fill=(220, 220, 225), primary_font=font_player, fallback_font=font_player_fallback)
+            
             overlay_draw.text((ptx, pty), pt, fill=(255, 180, 50), font=font_player_time)
             
-            py += 65
+            py += 55
             
-        y += card_h + 30
-
+        y += card_h + 20
+        
     img = Image.alpha_composite(img, overlay)
-    
+            
     output = BytesIO()
     img.save(output, format="PNG")
     output.seek(0)
