@@ -202,14 +202,34 @@ def build_live_embed(guild, bot):
     embed.set_footer(text="🔴 Live • Топ 10 • Оновлюється автоматично")
     return embed
 
-def get_user_avatar(uid, guild, bot):
+avatar_cache = {}
+
+async def get_user_avatar(uid, guild, bot):
+    uid_str = str(uid)
+    if uid_str in avatar_cache:
+        return avatar_cache[uid_str]
+        
     try:
         m = guild.get_member(int(uid)) if guild else None
-        if m and m.display_avatar: return m.display_avatar.url
+        if m and m.display_avatar: 
+            url = m.display_avatar.url
+            avatar_cache[uid_str] = url
+            return url
+            
         if bot:
             u = bot.get_user(int(uid))
-            if u and u.display_avatar: return u.display_avatar.url
+            if not u:
+                try:
+                    u = await bot.fetch_user(int(uid))
+                except:
+                    pass
+            if u and u.display_avatar: 
+                url = u.display_avatar.url
+                avatar_cache[uid_str] = url
+                return url
     except: pass
+    
+    avatar_cache[uid_str] = ""
     return ""
 
 async def update_fame_message(guild, bot):
@@ -233,7 +253,7 @@ async def update_fame_message(guild, bot):
     top_voice_data = []
     for uid, sec in top3_voice:
         name = database.get_display_name(uid, guild, bot)
-        avatar = get_user_avatar(uid, guild, bot)
+        avatar = await get_user_avatar(uid, guild, bot)
         top_voice_data.append({"name": name, "time": format_time(sec), "avatar_url": avatar})
 
     # --- STREAKS DATA ---
@@ -248,7 +268,7 @@ async def update_fame_message(guild, bot):
     top_streaks_data = []
     for uid_str, streak_count in top3_streaks:
         name = database.get_display_name(uid_str, guild, bot)
-        avatar = get_user_avatar(uid_str, guild, bot)
+        avatar = await get_user_avatar(uid_str, guild, bot)
         top_streaks_data.append({"name": name, "streak": f"{streak_count} днів підряд", "avatar_url": avatar})
 
     # --- GAMES DATA ---
@@ -267,8 +287,8 @@ async def update_fame_message(guild, bot):
         "arena breakout: infinite": "https://cdn.akamai.steamstatic.com/steam/apps/2073620/header.jpg",
         "forza horizon 6": "https://cdn.akamai.steamstatic.com/steam/apps/1551360/header.jpg",
         "forza horizon 5": "https://cdn.akamai.steamstatic.com/steam/apps/1551360/header.jpg",
-        "visual studio code": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/Visual_Studio_Code_1.35_icon.svg/512px-Visual_Studio_Code_1.35_icon.svg.png",
-        "outplayed": "https://support.overwolf.com/hc/article_attachments/360010996179/Outplayed.png",
+        "visual studio code": "https://raw.githubusercontent.com/microsoft/vscode/main/resources/win32/code_150x150.png",
+        "outplayed": "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/1f3ae.png",
         "arizona role play": "https://cdn.akamai.steamstatic.com/steam/apps/12120/header.jpg",
         "gta san andreas": "https://cdn.akamai.steamstatic.com/steam/apps/12120/header.jpg"
     }
@@ -279,7 +299,7 @@ async def update_fame_message(guild, bot):
             players_list = []
             for p_uid, p_sec in data["players"]:
                 p_name = database.get_display_name(p_uid, guild, bot)
-                p_avatar = get_user_avatar(p_uid, guild, bot)
+                p_avatar = await get_user_avatar(p_uid, guild, bot)
                 players_list.append({"name": p_name, "time": format_time(p_sec), "avatar_url": p_avatar})
             
             top_games_data.append({

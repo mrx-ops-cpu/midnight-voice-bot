@@ -450,7 +450,7 @@ def apply_background(width, height):
     return img
 
 async def generate_voice_image(top_voice_data):
-    width = 1600
+    width = 1000
     row_height = 90
     header_height = 120
     
@@ -460,7 +460,7 @@ async def generate_voice_image(top_voice_data):
     
     bg_draw = ImageDraw.Draw(img)
     bg_draw.ellipse([-300, -200, 500, 600], fill=(90, 20, 150, 40))
-    bg_draw.ellipse([1100, -100, 1900, 700], fill=(0, 150, 255, 30))
+    bg_draw.ellipse([500, -100, 1300, 700], fill=(0, 150, 255, 30))
     img = img.filter(ImageFilter.GaussianBlur(150))
     
     draw = ImageDraw.Draw(img)
@@ -530,7 +530,7 @@ async def generate_voice_image(top_voice_data):
     return output
 
 async def generate_streaks_image(top_streaks_data):
-    width = 1600
+    width = 1000
     row_height = 90
     header_height = 120
     
@@ -540,7 +540,7 @@ async def generate_streaks_image(top_streaks_data):
     
     bg_draw = ImageDraw.Draw(img)
     bg_draw.ellipse([-300, -200, 500, 600], fill=(200, 50, 0, 40))
-    bg_draw.ellipse([1100, -100, 1900, 700], fill=(255, 120, 0, 30))
+    bg_draw.ellipse([500, -100, 1300, 700], fill=(255, 120, 0, 30))
     img = img.filter(ImageFilter.GaussianBlur(150))
     
     draw = ImageDraw.Draw(img)
@@ -618,7 +618,7 @@ async def generate_streaks_image(top_streaks_data):
     return output
 
 async def generate_games_image(top_games_data, offset=0, show_header=True):
-    width = 1600
+    width = 1000
     game_header_height = 70
     player_row_height = 55
     header_height = 120 if show_header else 30
@@ -633,7 +633,7 @@ async def generate_games_image(top_games_data, offset=0, show_header=True):
     
     bg_draw = ImageDraw.Draw(img)
     bg_draw.ellipse([-300, -200, 500, 600], fill=(200, 20, 50, 40))
-    bg_draw.ellipse([1100, -100, 1900, 700], fill=(255, 100, 0, 30))
+    bg_draw.ellipse([500, -100, 1300, 700], fill=(255, 100, 0, 30))
     img = img.filter(ImageFilter.GaussianBlur(150))
     
     draw = ImageDraw.Draw(img)
