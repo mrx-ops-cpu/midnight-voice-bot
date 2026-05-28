@@ -39,11 +39,13 @@ live_message_id     = None
 fame_voice_msg_id   = None
 fame_streaks_msg_id = None
 fame_games_msg_id   = None
+fame_games_2_msg_id = None
 
 last_live_hash         = None
 last_fame_voice_hash   = None
 last_fame_streaks_hash = None
 last_fame_games_hash   = None
+last_fame_games_2_hash = None
 
 SAY_LIMIT         = 3
 say_usage         = {}

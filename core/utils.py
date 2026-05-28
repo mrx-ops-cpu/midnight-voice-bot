@@ -286,16 +286,25 @@ async def update_fame_message(guild, bot):
     # Generate images
     voice_file = discord.File(await image_gen.generate_voice_image(top_voice_data), filename="fame_voice.png")
     streaks_file = discord.File(await image_gen.generate_streaks_image(top_streaks_data), filename="fame_streaks.png")
-    games_file = discord.File(await image_gen.generate_games_image(top_games_data), filename="fame_games.png")
+    
+    games_part1 = top_games_data[:5]
+    games_part2 = top_games_data[5:10]
+    
+    games_file1 = discord.File(await image_gen.generate_games_image(games_part1, offset=0, show_header=True), filename="fame_games_1.png")
+    games_file2 = None
+    if games_part2:
+        games_file2 = discord.File(await image_gen.generate_games_image(games_part2, offset=5, show_header=False), filename="fame_games_2.png")
 
     # Hashes (serialize data dicts to check for changes)
     def hash_data(d): return hashlib.md5(json.dumps(d, sort_keys=True).encode('utf-8')).hexdigest()
     
     current_voice_hash = hash_data(top_voice_data)
     current_streaks_hash = hash_data(top_streaks_data)
-    current_games_hash = hash_data(top_games_data)
+    current_games1_hash = hash_data(games_part1)
+    current_games2_hash = hash_data(games_part2) if games_part2 else None
     
     async def update_msg(msg_id_attr, hash_attr, current_hash, file_obj):
+        if not file_obj or not current_hash: return None
         saved_hash = getattr(config, hash_attr, None)
         msg_id = getattr(config, msg_id_attr, None)
         
@@ -319,7 +328,10 @@ async def update_fame_message(guild, bot):
     # Update messages in requested order: Voice, Streaks, Games
     config.fame_voice_msg_id = await update_msg('fame_voice_msg_id', 'last_fame_voice_hash', current_voice_hash, voice_file)
     config.fame_streaks_msg_id = await update_msg('fame_streaks_msg_id', 'last_fame_streaks_hash', current_streaks_hash, streaks_file)
-    config.fame_games_msg_id = await update_msg('fame_games_msg_id', 'last_fame_games_hash', current_games_hash, games_file)
+    config.fame_games_msg_id = await update_msg('fame_games_msg_id', 'last_fame_games_hash', current_games1_hash, games_file1)
+    
+    if games_part2:
+        config.fame_games_2_msg_id = await update_msg('fame_games_2_msg_id', 'last_fame_games_2_hash', current_games2_hash, games_file2)
     
     database.save_message_ids()
 

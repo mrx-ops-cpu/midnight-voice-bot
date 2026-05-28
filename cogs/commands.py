@@ -383,11 +383,13 @@ class CommandsCog(commands.Cog):
         config.fame_voice_msg_id = None
         config.fame_streaks_msg_id = None
         config.fame_games_msg_id = None
+        config.fame_games_2_msg_id = None
         
         config.last_live_hash = None
         config.last_fame_voice_hash = None
         config.last_fame_streaks_hash = None
         config.last_fame_games_hash = None
+        config.last_fame_games_2_hash = None
         
         database.save_message_ids()
         
