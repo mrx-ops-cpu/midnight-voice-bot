@@ -738,10 +738,7 @@ async def generate_games_image(top_games_data, offset=0, show_header=True):
         g_name = g.get('name', 'Unknown')
         g_time = g.get('time', '0 h')
         g_icon = g.get('icon_url', '') or 'https://via.placeholder.com/56x56/2a2a2a/2a2a2a'
-        c_class = 'default'
-        if rank == 1: c_class = '1'
-        elif rank == 2: c_class = '2'
-        elif rank == 3: c_class = '3'
+        c_class = rank if rank <= 7 else 7
         
         players_html = ""
         for pl in g.get('players', []):
@@ -796,7 +793,10 @@ async def generate_games_image(top_games_data, offset=0, show_header=True):
             .card-1 {{ border: 2px solid #f6a125; box-shadow: 0 0 15px rgba(246,161,37,0.4), inset 0 0 10px rgba(246,161,37,0.2); }}
             .card-2 {{ border: 2px solid #57a6e5; box-shadow: 0 0 15px rgba(87,166,229,0.4), inset 0 0 10px rgba(87,166,229,0.2); }}
             .card-3 {{ border: 2px solid #e55757; box-shadow: 0 0 15px rgba(229,87,87,0.4), inset 0 0 10px rgba(229,87,87,0.2); }}
-            .card-default {{ border: 1px solid rgba(255, 118, 102, 0.15); }}
+            .card-4 {{ border: 2px solid #f7872a; box-shadow: 0 0 12px rgba(247,135,42,0.35), inset 0 0 8px rgba(247,135,42,0.15); }}
+            .card-5 {{ border: 2px solid #f7872a; box-shadow: 0 0 12px rgba(247,135,42,0.35), inset 0 0 8px rgba(247,135,42,0.15); }}
+            .card-6 {{ border: 2px solid #f7872a; box-shadow: 0 0 12px rgba(247,135,42,0.35), inset 0 0 8px rgba(247,135,42,0.15); }}
+            .card-7 {{ border: 2px solid #f7872a; box-shadow: 0 0 12px rgba(247,135,42,0.35), inset 0 0 8px rgba(247,135,42,0.15); }}
             .card::before {{ content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255, 118, 102, 0.4), transparent); }}
             .shield-container {{ width: 40px; height: 46px; position: relative; display: flex; justify-content: center; align-items: center; margin-right: 14px; flex-shrink: 0; }}
             .shield-svg {{ position: absolute; width: 100%; height: 100%; top: 0; left: 0; }}
@@ -815,8 +815,10 @@ async def generate_games_image(top_games_data, offset=0, show_header=True):
             .rank-1 {{ color: #f6a125; filter: drop-shadow(0 0 6px rgba(246,161,37,0.8)); }}
             .rank-2 {{ color: #57a6e5; filter: drop-shadow(0 0 6px rgba(87,166,229,0.8)); }}
             .rank-3 {{ color: #e55757; filter: drop-shadow(0 0 6px rgba(229,87,87,0.8)); }}
-            .rank-4 {{ color: #dd3300; filter: drop-shadow(0 0 6px rgba(221,51,0,0.5)); }}
-            .rank-5 {{ color: #cc2200; filter: drop-shadow(0 0 6px rgba(204,34,0,0.5)); }}
+            .rank-4 {{ color: #f7872a; filter: drop-shadow(0 0 6px rgba(247,135,42,0.7)); }}
+            .rank-5 {{ color: #f7872a; filter: drop-shadow(0 0 6px rgba(247,135,42,0.7)); }}
+            .rank-6 {{ color: #f7872a; filter: drop-shadow(0 0 6px rgba(247,135,42,0.7)); }}
+            .rank-7 {{ color: #f7872a; filter: drop-shadow(0 0 6px rgba(247,135,42,0.7)); }}
         </style>
     </head>
     <body>

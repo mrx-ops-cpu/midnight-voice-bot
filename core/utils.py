@@ -321,16 +321,22 @@ async def update_fame_message(guild, bot):
             
             games_part1 = top_games_data[:3]
             games_part2 = top_games_data[3:6]
+            games_part3 = top_games_data[6:9]
             
             g1_img = await image_gen.generate_games_image(games_part1, offset=0, show_header=True)
             games_file1 = discord.File(g1_img, filename="fame_games_1.png")
             
             games_file2 = None
             if games_part2:
-                g2_img = await image_gen.generate_games_image(games_part2, offset=4, show_header=False)
+                g2_img = await image_gen.generate_games_image(games_part2, offset=3, show_header=False)
                 games_file2 = discord.File(g2_img, filename="fame_games_2.png")
+            
+            games_file3 = None
+            if games_part3:
+                g3_img = await image_gen.generate_games_image(games_part3, offset=6, show_header=False)
+                games_file3 = discord.File(g3_img, filename="fame_games_3.png")
         except Exception as e:
-            await ch.send(f"❌ Помилка малювання картинок: `{str(e)}`\n```{traceback.format_exc()[:1800]}```")
+            await ch.send(f"❌ Помилка малювання картинок: `{str(e)}`\n```{traceback.format_exc()[:1800]}```", silent=True)
             return
 
         # Hashes (serialize data dicts to check for changes)
@@ -340,15 +346,36 @@ async def update_fame_message(guild, bot):
         current_streaks_hash = hash_data(top_streaks_data)
         current_games1_hash = hash_data(games_part1)
         current_games2_hash = hash_data(games_part2) if games_part2 else None
-        
+        current_games3_hash = hash_data(games_part3) if games_part3 else None
+
+        all_fame_msgs = [
+            ('fame_voice_msg_id',    'last_fame_voice_hash',    current_voice_hash,    voice_file),
+            ('fame_streaks_msg_id',  'last_fame_streaks_hash',  current_streaks_hash,  streaks_file),
+            ('fame_games_msg_id',    'last_fame_games_hash',    current_games1_hash,   games_file1),
+            ('fame_games_2_msg_id',  'last_fame_games_2_hash',  current_games2_hash,   games_file2),
+            ('fame_games_3_msg_id',  'last_fame_games_3_hash',  current_games3_hash,   games_file3),
+        ]
+
+        async def delete_all_fame():
+            """Delete all existing fame messages to allow a clean resend in order."""
+            for msg_id_attr, _, _, _ in all_fame_msgs:
+                msg_id = getattr(config, msg_id_attr, None)
+                if msg_id:
+                    try:
+                        msg = await ch.fetch_message(msg_id)
+                        await msg.delete()
+                    except Exception:
+                        pass
+                    setattr(config, msg_id_attr, None)
+
         async def update_msg(msg_id_attr, hash_attr, current_hash, file_obj):
             if not file_obj or not current_hash: return None
             saved_hash = getattr(config, hash_attr, None)
             msg_id = getattr(config, msg_id_attr, None)
-            
+
             if saved_hash == current_hash and msg_id:
-                return msg_id # No change needed
-                
+                return msg_id  # No change needed
+
             if msg_id:
                 try:
                     msg = await ch.fetch_message(msg_id)
@@ -357,27 +384,48 @@ async def update_fame_message(guild, bot):
                     return msg_id
                 except discord.NotFound:
                     setattr(config, msg_id_attr, None)
-                    
-            # Send new
-            msg = await ch.send(file=file_obj)
+                except discord.HTTPException as e:
+                    if e.code == 30046:
+                        # 30046 is Discord's hard limit on edits to old messages.
+                        # Delete all and re-raise to send all new silently
+                        await delete_all_fame()
+                        raise _NeedFullResend()
+                    else:
+                        raise
+
+            # Send new silently
+            msg = await ch.send(file=file_obj, silent=True)
             setattr(config, hash_attr, current_hash)
             return msg.id
 
-        # Update messages in requested order: Voice, Streaks, Games
-        config.fame_voice_msg_id = await update_msg('fame_voice_msg_id', 'last_fame_voice_hash', current_voice_hash, voice_file)
-        config.fame_streaks_msg_id = await update_msg('fame_streaks_msg_id', 'last_fame_streaks_hash', current_streaks_hash, streaks_file)
-        config.fame_games_msg_id = await update_msg('fame_games_msg_id', 'last_fame_games_hash', current_games1_hash, games_file1)
-        
-        if games_part2:
-            config.fame_games_2_msg_id = await update_msg('fame_games_2_msg_id', 'last_fame_games_2_hash', current_games2_hash, games_file2)
-        
+        class _NeedFullResend(Exception):
+            pass
+
+        async def send_all_fame_in_order():
+            """Send all fame messages fresh, in the correct order silently."""
+            for msg_id_attr, hash_attr, current_hash, file_obj in all_fame_msgs:
+                if not file_obj or not current_hash:
+                    continue
+                msg = await ch.send(file=file_obj, silent=True)
+                setattr(config, msg_id_attr, msg.id)
+                setattr(config, hash_attr, current_hash)
+
+        # Try normal update; on 30046 do a full clean resend silently
+        try:
+            for msg_id_attr, hash_attr, current_hash, file_obj in all_fame_msgs:
+                new_id = await update_msg(msg_id_attr, hash_attr, current_hash, file_obj)
+                setattr(config, msg_id_attr, new_id)
+        except _NeedFullResend:
+            await send_all_fame_in_order()
+
         database.save_message_ids()
+
     except Exception as e:
         import traceback
         monitor_id = database.load_monitor_channel() or config.GAMING_MONITOR_ID
         ch = bot.get_channel(monitor_id)
         if ch:
-            await ch.send(f"❌ Критична помилка в update_fame_message:\n```{traceback.format_exc()[:1800]}```")
+            await ch.send(f"❌ Критична помилка в update_fame_message:\n```{traceback.format_exc()[:1800]}```", silent=True)
 
 async def update_live_message(guild, bot):
     monitor_id = database.load_monitor_channel() or config.GAMING_MONITOR_ID
