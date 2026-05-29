@@ -229,9 +229,42 @@ def normalize_game_name(game_name):
         return "GTA V"
     return game_name
 
+def load_hidden_games():
+    if not os.path.exists(config.HIDDEN_GAMES_FILE):
+        return []
+    try:
+        with open(config.HIDDEN_GAMES_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return []
+
+def save_hidden_games(games_list):
+    with open(config.HIDDEN_GAMES_FILE, "w", encoding="utf-8") as f:
+        json.dump(games_list, f, ensure_ascii=False)
+
+def hide_game(game_name):
+    norm_name = normalize_game_name(game_name)
+    hidden = load_hidden_games()
+    if norm_name not in hidden:
+        hidden.append(norm_name)
+        save_hidden_games(hidden)
+        return True
+    return False
+
+def unhide_game(game_name):
+    norm_name = normalize_game_name(game_name)
+    hidden = load_hidden_games()
+    if norm_name in hidden:
+        hidden.remove(norm_name)
+        save_hidden_games(hidden)
+        return True
+    return False
+
 def get_top_games(limit_games=10, limit_players=3):
     s = load_stats()
     gd = {}
+    hidden_games = load_hidden_games()
+    
     games_data = s.get("games", {})
     if not isinstance(games_data, dict): 
         games_data = {}
@@ -242,6 +275,10 @@ def get_top_games(limit_games=10, limit_players=3):
                 sec = float(sec)
             except: continue
             norm_game = normalize_game_name(game)
+            
+            if norm_game in hidden_games:
+                continue
+                
             if norm_game not in gd:
                 gd[norm_game] = {"total": 0, "players": {}}
             gd[norm_game]["total"] += sec

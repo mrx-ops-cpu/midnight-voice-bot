@@ -440,5 +440,53 @@ class CommandsCog(commands.Cog):
         await utils.update_fame_message(interaction.guild, self.bot)
         await interaction.followup.send("✅ Картинки успішно оновлено!", ephemeral=True)
 
+    @app_commands.command(name="hidegame", description="Приховати гру з Топів (для адмінів)")
+    @app_commands.describe(game="Назва програми чи гри (наприклад: Visual Studio Code)")
+    async def hidegame_cmd(self, interaction: discord.Interaction, game: str):
+        if not interaction.user.guild_permissions.administrator:
+            return await interaction.response.send_message("❌ Тільки адмін може це зробити!", ephemeral=True)
+            
+        await interaction.response.defer(ephemeral=True)
+        success = database.hide_game(game)
+        if success:
+            # Force update hashes so it definitely refreshes
+            config.last_fame_games_hash = None
+            config.last_fame_games_2_hash = None
+            config.last_fame_games_3_hash = None
+            await utils.update_fame_message(interaction.guild, self.bot)
+            await interaction.followup.send(f"✅ Програма **{game}** прихована з топів! Картинки оновлено.", ephemeral=True)
+        else:
+            await interaction.followup.send(f"⚠️ Програма **{game}** вже була прихована.", ephemeral=True)
+
+    @app_commands.command(name="unhidegame", description="Повернути приховану гру в Топи (для адмінів)")
+    @app_commands.describe(game="Назва програми чи гри")
+    async def unhidegame_cmd(self, interaction: discord.Interaction, game: str):
+        if not interaction.user.guild_permissions.administrator:
+            return await interaction.response.send_message("❌ Тільки адмін може це зробити!", ephemeral=True)
+            
+        await interaction.response.defer(ephemeral=True)
+        success = database.unhide_game(game)
+        if success:
+            config.last_fame_games_hash = None
+            config.last_fame_games_2_hash = None
+            config.last_fame_games_3_hash = None
+            await utils.update_fame_message(interaction.guild, self.bot)
+            await interaction.followup.send(f"✅ Програма **{game}** повернена в топи! Картинки оновлено.", ephemeral=True)
+        else:
+            await interaction.followup.send(f"⚠️ Програма **{game}** не була знайдена у списку прихованих.", ephemeral=True)
+
+    @app_commands.command(name="hiddengames", description="Список усіх прихованих ігор (для адмінів)")
+    async def hiddengames_cmd(self, interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.administrator:
+            return await interaction.response.send_message("❌ Тільки адмін може це зробити!", ephemeral=True)
+            
+        hidden = database.load_hidden_games()
+        if not hidden:
+            return await interaction.response.send_message("ℹ️ Список прихованих програм зараз порожній.", ephemeral=True)
+            
+        desc = "\n".join(f"- `{g}`" for g in hidden)
+        embed = discord.Embed(title="🚫 Приховані ігри", description=desc, color=0x2b2d31)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
 async def setup(bot):
     await bot.add_cog(CommandsCog(bot))
