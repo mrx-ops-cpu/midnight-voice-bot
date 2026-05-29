@@ -140,7 +140,6 @@ class EventsCog(commands.Cog):
         if changed:
             database.save_game_sessions()
             database.save_active_rooms()
-            await utils.update_fame_message(guild, self.bot)
             await utils.update_live_message(guild, self.bot)
 
 async def setup(bot):

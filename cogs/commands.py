@@ -302,13 +302,32 @@ class CommandsCog(commands.Cog):
         finally:
             shutil.rmtree(temp_dir)
 
-    @app_commands.command(name="help", description="Список команд")
+    @app_commands.command(name="help", description="Список команд бота")
     async def help_cmd(self, interaction: discord.Interaction):
-        embed = discord.Embed(title="🌑 Midnight Bot | Допомога", color=0x2b2d31)
-        embed.add_field(name="📊 Статистика", value="`/stats profile` `/stats top` `/stats full`", inline=False)
-        embed.add_field(name="🎮 Геймінг", value="`/stats games` `/stats kings`", inline=False)
-        embed.add_field(name="🎙️ Войс та Інше", value="`/say` `/ping` `/info` `/ai`", inline=False)
-        embed.add_field(name="⚙️ Система", value="`/admin` `/menu`", inline=False)
+        embed = discord.Embed(title="🌑 Midnight Bot | Список команд", color=0x2b2d31)
+        
+        player_cmds = (
+            "`/menu` — Головне меню\n"
+            "`/say` — Сказати у войсі\n"
+            "`/ai` — Запитати ШІ\n"
+            "`/ping` — Затримка бота\n"
+            "`/help` — Цей список"
+        )
+        
+        admin_cmds = (
+            "`/admin` — Панель керування\n"
+            "`/info` — Статус системи\n"
+            "`/updatestats` — Оновити топи\n"
+            "`/setmonitorchannel` — Канал топів\n"
+            "`/setvoice` — Канал бота\n"
+            "`/backup` — Зробити бекап\n"
+            "`/restore` — Відновити бекап"
+        )
+        
+        embed.add_field(name="🎮 Для Гравців", value=player_cmds, inline=True)
+        embed.add_field(name="⚙️ Для Адміністраторів", value=admin_cmds, inline=True)
+        
+        embed.set_thumbnail(url=self.bot.user.display_avatar.url)
         embed.set_footer(text=utils.midnight_footer())
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -399,7 +418,25 @@ class CommandsCog(commands.Cog):
             await utils.update_fame_message(interaction.guild, self.bot)
             await utils.update_live_message(interaction.guild, self.bot)
             
+            
         asyncio.create_task(send_in_order())
+
+    @app_commands.command(name="updatestats", description="Оновити картинки слави (Топи) прямо зараз")
+    async def updatestats(self, interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.administrator:
+            return await interaction.response.send_message("❌ Тільки адмін може це зробити!", ephemeral=True)
+            
+        await interaction.response.defer(ephemeral=True)
+        
+        # Force clear hashes so it definitely updates even if it thinks nothing changed
+        config.last_fame_voice_hash = None
+        config.last_fame_streaks_hash = None
+        config.last_fame_games_hash = None
+        config.last_fame_games_2_hash = None
+        config.last_fame_games_3_hash = None
+        
+        await utils.update_fame_message(interaction.guild, self.bot)
+        await interaction.followup.send("✅ Картинки успішно оновлено!", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(CommandsCog(bot))

@@ -336,7 +336,9 @@ async def update_fame_message(guild, bot):
                 g3_img = await image_gen.generate_games_image(games_part3, offset=6, show_header=False)
                 games_file3 = discord.File(g3_img, filename="fame_games_3.png")
         except Exception as e:
-            await ch.send(f"❌ Помилка малювання картинок: `{str(e)}`\n```{traceback.format_exc()[:1800]}```", silent=True)
+            owner = bot.get_user(config.OWNER_ID) or await bot.fetch_user(config.OWNER_ID)
+            if owner:
+                await owner.send(f"❌ Помилка малювання картинок: `{str(e)}`\n```{traceback.format_exc()[:1800]}```", silent=True)
             return
 
         # Hashes (serialize data dicts to check for changes)
@@ -367,6 +369,16 @@ async def update_fame_message(guild, bot):
                     except Exception:
                         pass
                     setattr(config, msg_id_attr, None)
+                    
+            # Also delete the live message so it gets recreated at the very bottom
+            if config.live_message_id:
+                try:
+                    live_msg = await ch.fetch_message(config.live_message_id)
+                    await live_msg.delete()
+                except Exception:
+                    pass
+                config.live_message_id = None
+                config.last_live_hash = None
 
         async def update_msg(msg_id_attr, hash_attr, current_hash, file_obj):
             if not file_obj or not current_hash: return None
@@ -406,9 +418,13 @@ async def update_fame_message(guild, bot):
             for msg_id_attr, hash_attr, current_hash, file_obj in all_fame_msgs:
                 if not file_obj or not current_hash:
                     continue
+                file_obj.reset()  # Reset file pointer before re-sending
                 msg = await ch.send(file=file_obj, silent=True)
                 setattr(config, msg_id_attr, msg.id)
                 setattr(config, hash_attr, current_hash)
+            
+            # Instantly respawn the live message
+            await update_live_message(guild, bot)
 
         # Try normal update; on 30046 do a full clean resend silently
         try:
@@ -422,10 +438,9 @@ async def update_fame_message(guild, bot):
 
     except Exception as e:
         import traceback
-        monitor_id = database.load_monitor_channel() or config.GAMING_MONITOR_ID
-        ch = bot.get_channel(monitor_id)
-        if ch:
-            await ch.send(f"❌ Критична помилка в update_fame_message:\n```{traceback.format_exc()[:1800]}```", silent=True)
+        owner = bot.get_user(config.OWNER_ID) or await bot.fetch_user(config.OWNER_ID)
+        if owner:
+            await owner.send(f"❌ Критична помилка в update_fame_message:\n```{traceback.format_exc()[:1800]}```", silent=True)
 
 async def update_live_message(guild, bot):
     monitor_id = database.load_monitor_channel() or config.GAMING_MONITOR_ID
@@ -456,7 +471,7 @@ async def update_live_message(guild, bot):
                 return
     except: pass
     
-    msg = await ch.send(embed=embed)
+    msg = await ch.send(embed=embed, silent=True)
     config.live_message_id = msg.id
     config.last_live_hash = current_hash
     database.save_message_ids()

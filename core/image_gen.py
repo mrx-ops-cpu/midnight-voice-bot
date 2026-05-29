@@ -531,36 +531,42 @@ _render_lock = _asyncio.Semaphore(1)
 async def render_html_to_image(html_content, width=600):
     from io import BytesIO
     import shutil
+    import asyncio
 
     async with _render_lock:
-        browser = None
-        page = None
-        async with async_playwright() as p:
+        for attempt in range(3):
+            browser = None
+            page = None
             try:
-                executable_path = shutil.which("chromium") or shutil.which("google-chrome") or shutil.which("chromium-browser")
-                launch_args = {
-                    "args": [
-                        "--no-sandbox",
-                        "--disable-setuid-sandbox",
-                        "--disable-dev-shm-usage",
-                        "--disable-gpu",
-                        "--disable-extensions",
-                        "--disable-background-networking",
-                        "--disable-background-timer-throttling",
-                        "--single-process",
-                    ]
-                }
-                if executable_path:
-                    launch_args["executable_path"] = executable_path
+                async with async_playwright() as p:
+                    executable_path = shutil.which("chromium") or shutil.which("google-chrome") or shutil.which("chromium-browser")
+                    launch_args = {
+                        "args": [
+                            "--no-sandbox",
+                            "--disable-setuid-sandbox",
+                            "--disable-dev-shm-usage",
+                            "--disable-gpu",
+                            "--disable-extensions",
+                            "--disable-background-networking",
+                            "--disable-background-timer-throttling",
+                        ]
+                    }
+                    if executable_path:
+                        launch_args["executable_path"] = executable_path
 
-                browser = await p.chromium.launch(**launch_args)
-                page = await browser.new_page(device_scale_factor=2.0)
-                # domcontentloaded is much faster than the default 'load'
-                await page.set_content(html_content, wait_until="domcontentloaded")
-                await page.wait_for_timeout(300)
+                    browser = await p.chromium.launch(**launch_args)
+                    page = await browser.new_page(device_scale_factor=2.0)
+                    # domcontentloaded is much faster than the default 'load'
+                    await page.set_content(html_content, wait_until="domcontentloaded")
+                    await page.wait_for_timeout(300)
 
-                screenshot_bytes = await page.locator("body").screenshot(omit_background=True)
-                return BytesIO(screenshot_bytes)
+                    screenshot_bytes = await page.locator("body").screenshot(omit_background=True)
+                    return BytesIO(screenshot_bytes)
+            except Exception as e:
+                print(f"⚠️ Playwright render attempt {attempt + 1} failed: {e}")
+                if attempt == 2:
+                    raise  # Якщо впало 3 рази поспіль - кидаємо помилку далі (відправиться вам в лічку)
+                await asyncio.sleep(2)  # Чекаємо 2 секунди перед новою спробою
             finally:
                 # Always close page and browser even if an error occurred
                 if page:
