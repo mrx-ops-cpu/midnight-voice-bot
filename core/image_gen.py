@@ -789,32 +789,32 @@ async def generate_games_image(top_games_data, offset=0, show_header=True):
                                   radial-gradient(circle at 90% 80%, rgba(150, 30, 20, 0.6) 0%, transparent 40%);
                 font-family: 'Inter', sans-serif; color: white; padding: 30px; width: 800px; margin: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased;
             }}
-            .container {{ padding: 24px; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box; }}
-            .header {{ text-align: center; color: #ff7666; font-size: 26px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; filter: drop-shadow(0 0 10px rgba(255, 118, 102, 0.4)); }}
-            .card {{ background: linear-gradient(145deg, rgba(30, 20, 20, 0.9), rgba(15, 10, 10, 0.95)); border-radius: 18px; padding: 22px; display: flex; align-items: stretch; position: relative; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid rgba(255, 118, 102, 0.15); margin-bottom: 20px; }}
+            .container {{ padding: 20px; display: flex; flex-direction: column; gap: 12px; box-sizing: border-box; }}
+            .header {{ text-align: center; color: #ff7666; font-size: 24px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; filter: drop-shadow(0 0 10px rgba(255, 118, 102, 0.4)); }}
+            .card {{ background: linear-gradient(145deg, rgba(30, 20, 20, 0.9), rgba(15, 10, 10, 0.95)); border-radius: 14px; padding: 14px 18px; display: flex; align-items: stretch; position: relative; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid rgba(255, 118, 102, 0.15); margin-bottom: 0; }}
             .card:last-child {{ margin-bottom: 0; }}
             .card-1 {{ border: 2px solid #f6a125; box-shadow: 0 0 15px rgba(246,161,37,0.4), inset 0 0 10px rgba(246,161,37,0.2); }}
             .card-2 {{ border: 2px solid #57a6e5; box-shadow: 0 0 15px rgba(87,166,229,0.4), inset 0 0 10px rgba(87,166,229,0.2); }}
             .card-3 {{ border: 2px solid #e55757; box-shadow: 0 0 15px rgba(229,87,87,0.4), inset 0 0 10px rgba(229,87,87,0.2); }}
             .card-default {{ border: 1px solid rgba(255, 118, 102, 0.15); }}
             .card::before {{ content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255, 118, 102, 0.4), transparent); }}
-            .shield-container {{ width: 50px; height: 56px; position: relative; display: flex; justify-content: center; align-items: center; margin-right: 20px; flex-shrink: 0; }}
+            .shield-container {{ width: 40px; height: 46px; position: relative; display: flex; justify-content: center; align-items: center; margin-right: 14px; flex-shrink: 0; }}
             .shield-svg {{ position: absolute; width: 100%; height: 100%; top: 0; left: 0; }}
-            .rank-text {{ font-size: 18px; font-weight: 800; z-index: 2; margin-top: -2px; }}
-            .game-icon {{ width: 76px; height: 76px; border-radius: 14px; margin-right: 22px; flex-shrink: 0; background-color: #2a2a2a; border: 1px solid rgba(255,255,255,0.05); background-size: cover; background-position: center; }}
+            .rank-text {{ font-size: 15px; font-weight: 800; z-index: 2; margin-top: -2px; }}
+            .game-icon {{ width: 56px; height: 56px; border-radius: 10px; margin-right: 16px; flex-shrink: 0; background-color: #2a2a2a; border: 1px solid rgba(255,255,255,0.05); background-size: cover; background-position: center; }}
             .game-info {{ flex: 1; display: flex; flex-direction: column; justify-content: center; }}
             .game-title-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }}
-            .game-name {{ font-size: 22px; font-weight: 800; color: #ff7666; text-shadow: 0 0 10px rgba(255, 118, 102, 0.8), 0 0 20px rgba(255, 118, 102, 0.4); }}
-            .game-time {{ font-size: 22px; font-weight: 800; color: #f7a93b; text-shadow: 0 0 10px rgba(247, 169, 59, 0.8), 0 0 20px rgba(247, 169, 59, 0.4); }}
-            .player-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }}
+            .game-name {{ font-size: 18px; font-weight: 800; color: #ff7666; text-shadow: 0 0 10px rgba(255, 118, 102, 0.8), 0 0 20px rgba(255, 118, 102, 0.4); }}
+            .game-time {{ font-size: 18px; font-weight: 800; color: #f7a93b; text-shadow: 0 0 10px rgba(247, 169, 59, 0.8), 0 0 20px rgba(247, 169, 59, 0.4); }}
+            .player-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }}
             .player-row:last-child {{ margin-bottom: 0; }}
             .player-left {{ display: flex; align-items: center; }}
-            .player-avatar {{ width: 22px; height: 22px; border-radius: 50%; background: #ccc; margin-right: 10px; background-size: cover; background-position: center; }}
-            .player-name {{ font-size: 17px; color: #c4cdd5; font-weight: 700; }}
-            .player-time {{ font-size: 17px; color: #e5c487; font-weight: 700; text-shadow: 0 0 8px rgba(229, 196, 135, 0.7); }}
-            .rank-1 {{ color: #ff6633; filter: drop-shadow(0 0 6px rgba(255,102,51,0.5)); }}
-            .rank-2 {{ color: #ff5522; filter: drop-shadow(0 0 6px rgba(255,85,34,0.5)); }}
-            .rank-3 {{ color: #ee4411; filter: drop-shadow(0 0 6px rgba(238,68,17,0.5)); }}
+            .player-avatar {{ width: 18px; height: 18px; border-radius: 50%; background: #ccc; margin-right: 7px; background-size: cover; background-position: center; }}
+            .player-name {{ font-size: 14px; color: #c4cdd5; font-weight: 700; }}
+            .player-time {{ font-size: 14px; color: #e5c487; font-weight: 700; text-shadow: 0 0 8px rgba(229, 196, 135, 0.7); }}
+            .rank-1 {{ color: #f6a125; filter: drop-shadow(0 0 6px rgba(246,161,37,0.8)); }}
+            .rank-2 {{ color: #57a6e5; filter: drop-shadow(0 0 6px rgba(87,166,229,0.8)); }}
+            .rank-3 {{ color: #e55757; filter: drop-shadow(0 0 6px rgba(229,87,87,0.8)); }}
             .rank-4 {{ color: #dd3300; filter: drop-shadow(0 0 6px rgba(221,51,0,0.5)); }}
             .rank-5 {{ color: #cc2200; filter: drop-shadow(0 0 6px rgba(204,34,0,0.5)); }}
         </style>
