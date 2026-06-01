@@ -1,7 +1,7 @@
 import os
 import json
 from datetime import datetime, date, timedelta, timezone
-from core import config
+from core import config, db_sqlite
 
 def get_kyiv_date():
     utc_now = datetime.now(timezone.utc)
@@ -9,23 +9,10 @@ def get_kyiv_date():
     return kyiv_now.date().isoformat()
 
 def load_stats():
-    if os.path.exists(config.STATS_FILE):
-        try:
-            with open(config.STATS_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            for k in ("total", "daily", "games", "streaks", "fame_streaks", "history"):
-                data.setdefault(k, {})
-            return data
-        except Exception as e: print(f"ERROR load_stats: {e}")
-    return {"total": {}, "daily": {}, "games": {}, "streaks": {}, "fame_streaks": {}, "history": {}}
+    return db_sqlite.load_stats_sqlite()
 
 def save_stats(data):
-    try:
-        tmp_file = config.STATS_FILE + ".tmp"
-        with open(tmp_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        os.replace(tmp_file, config.STATS_FILE)
-    except Exception as e: print(f"ERROR save_stats: {e}")
+    db_sqlite.save_stats_sqlite(data)
 
 def load_voice_sessions():
     if os.path.exists(config.SESSIONS_FILE):

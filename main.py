@@ -9,7 +9,11 @@ from flask import Flask, render_template
 from dotenv import load_dotenv
 load_dotenv()
 
-from core import config, database, utils
+from core import config, database, utils, db_sqlite
+
+# Initialize SQLite database and run migration if needed
+print("Initializing database...")
+db_sqlite.init_db()
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='!', intents=intents, chunk_guilds_at_startup=True)

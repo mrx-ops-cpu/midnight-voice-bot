@@ -29,6 +29,7 @@ MAFIA_FILE         = os.path.join(DATA_DIR, "mafia_stats.json")
 BOT_VOICE_FILE     = os.path.join(DATA_DIR, "bot_voice.json")
 MONITOR_CHANNEL_FILE = os.path.join(DATA_DIR, "monitor_channel.json")
 HIDDEN_GAMES_FILE  = os.path.join(DATA_DIR, "hidden_games.json")
+SQLITE_DB_FILE     = os.path.join(DATA_DIR, "midnight.db")
 
 os.makedirs(DATA_DIR, exist_ok=True)
 
