@@ -8,6 +8,11 @@ os.system('python -m playwright install-deps chromium')
 from playwright.async_api import async_playwright
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
 from io import BytesIO
+import jinja2
+
+# Set up Jinja2 environment for templates
+template_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'templates')
+jinja_env = jinja2.Environment(loader=jinja2.FileSystemLoader(template_dir))
 
 def normalize_name(name):
     """Convert fancy Unicode (𝘼𝙧𝙩𝙚𝙢) to normal readable text (Artem)"""
@@ -583,256 +588,16 @@ async def render_html_to_image(html_content, width=600):
 
 
 async def generate_voice_image(top_voice_data):
-    cards_html = ""
-    for i, p in enumerate(top_voice_data):
-        rank = i + 1
-        name = p.get('name', 'Unknown')
-        time = p.get('time', '0')
-        avatar = p.get('avatar_url', '') or 'https://ui-avatars.com/api/?background=random&name=' + name.replace(" ", "+")
-        
-        c_class = min(rank, 3)
-        
-        cards_html += f'''
-        <div class="card card-{c_class}">
-            <div class="shield-container outline-{c_class}">
-                <svg class="shield-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                </svg>
-                <div class="rank-text color-{c_class}">#{rank}</div>
-            </div>
-            <div class="avatar-container"><div class="avatar-img" style="background-image: url('{avatar}');"></div></div>
-            <div class="player-info">
-                <div class="player-name">{name}</div>
-                <div class="time-box">
-                    <div class="voice-time">{time}</div>
-                    <div class="voice-sub">в голосі</div>
-                </div>
-            </div>
-        </div>
-        '''
-
-    html = f'''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-            body {{
-                background-color: #08070d;
-                background-image: radial-gradient(circle at 20% 40%, rgba(130, 60, 200, 0.7) 0%, transparent 60%),
-                                  radial-gradient(circle at 80% 60%, rgba(60, 160, 200, 0.6) 0%, transparent 60%);
-                font-family: 'Inter', sans-serif; color: white; padding: 30px; width: 800px; margin: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased;
-            }}
-            .header {{ text-align: center; font-size: 26px; font-weight: 900; color: #a461f5; text-shadow: 0 0 15px rgba(164, 97, 245, 0.8); margin-bottom: 25px; text-transform: uppercase; }}
-            .container {{ background: rgba(24, 25, 28, 0.4); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 14px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }}
-            .container-top {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }}
-            .top-label {{ font-size: 14px; font-weight: 800; color: #b0b5bd; display: flex; align-items: center; gap: 8px; }}
-            .voice-btn {{ background: rgba(30, 80, 40, 0.2); border: 1px solid rgba(60, 150, 60, 0.4); color: #4ade80; padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 800; display: flex; align-items: center; gap: 6px; text-shadow: 0 0 8px rgba(74, 222, 128, 0.4); }}
-            .card {{ background: rgba(30, 32, 38, 0.6); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px; padding: 12px 18px; margin-bottom: 12px; display: flex; align-items: center; position: relative; backdrop-filter: blur(10px); }}
-            .card:last-child {{ margin-bottom: 0; }}
-            .card-1 {{ border: 2px solid #f6a125; box-shadow: 0 0 15px rgba(246,161,37,0.4), inset 0 0 10px rgba(246,161,37,0.2); background: rgba(45, 35, 25, 0.8); }}
-            .card-2 {{ border: 2px solid #57a6e5; box-shadow: 0 0 15px rgba(87,166,229,0.4), inset 0 0 10px rgba(87,166,229,0.2); background: rgba(25, 35, 45, 0.8); }}
-            .card-3 {{ border: 2px solid #e55757; box-shadow: 0 0 15px rgba(229,87,87,0.4), inset 0 0 10px rgba(229,87,87,0.2); background: rgba(45, 25, 25, 0.8); }}
-            .shield-container {{ width: 38px; height: 44px; position: relative; display: flex; justify-content: center; align-items: center; margin-right: 18px; flex-shrink: 0; }}
-            .shield-svg {{ position: absolute; width: 100%; height: 100%; top: 0; left: 0; }}
-            .rank-text {{ font-size: 14px; font-weight: 800; z-index: 2; margin-top: -2px; }}
-            .avatar-container {{ width: 48px; height: 48px; border-radius: 50%; position: relative; margin-right: 18px; flex-shrink: 0; border: 2px solid rgba(255,255,255,0.1); }}
-            .avatar-img {{ width: 100%; height: 100%; border-radius: 50%; background-size: cover; background-position: center; }}
-            .player-info {{ flex: 1; display: flex; justify-content: space-between; align-items: center; }}
-            .player-name {{ font-size: 16px; font-weight: 800; color: #ffffff; text-shadow: 0 0 8px rgba(255, 255, 255, 0.3); }}
-            .time-box {{ display: flex; flex-direction: column; align-items: flex-end; }}
-            .voice-time {{ font-size: 18px; font-weight: 800; color: #f7a93b; text-shadow: 0 0 10px rgba(247, 169, 59, 0.6); }}
-            .voice-sub {{ font-size: 10px; font-weight: 600; color: #8a8a93; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }}
-            .color-1 {{ color: #f6a125; }} .color-2 {{ color: #a4b4c4; }} .color-3 {{ color: #cd7f32; }}
-            .outline-1 {{ color: #f6a125; filter: drop-shadow(0 0 4px rgba(246,161,37,0.8)); }}
-            .outline-2 {{ color: #a4b4c4; filter: drop-shadow(0 0 4px rgba(164,180,196,0.8)); }}
-            .outline-3 {{ color: #cd7f32; filter: drop-shadow(0 0 4px rgba(205,127,50,0.8)); }}
-        </style>
-    </head>
-    <body>
-        <div class="header">💜 ТОП VOICE</div>
-        <div class="container">
-            <div class="container-top">
-                <div class="top-label">⬅ VOICE LEADERBOARD 💜</div>
-                <div class="voice-btn">🎙 VOICE CHAT</div>
-            </div>
-            {cards_html}
-        </div>
-    </body>
-    </html>
-    '''
+    template = jinja_env.get_template('voice_top.html')
+    html = template.render(top_voice_data=top_voice_data)
     return await render_html_to_image(html)
 
 async def generate_streaks_image(top_streaks_data):
-    cards_html = ""
-    for i, p in enumerate(top_streaks_data):
-        rank = i + 1
-        name = p.get('name', 'Unknown')
-        time = p.get('streak', '0')
-        avatar = p.get('avatar_url', '') or 'https://ui-avatars.com/api/?background=random&name=' + name.replace(" ", "+")
-        
-        c_class = min(rank, 3)
-        
-        cards_html += f'''
-        <div class="card card-{c_class}">
-            <div class="shield-container outline-{c_class}">
-                <svg class="shield-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                </svg>
-                <div class="rank-text color-{c_class}">#{rank}</div>
-            </div>
-            <div class="avatar-container avatar-{c_class}"><div class="avatar-img" style="background-image: url('{avatar}');"></div></div>
-            <div class="player-info">
-                <div class="player-name">{name} 🔥</div>
-                <div class="streak-time">{time}</div>
-            </div>
-        </div>
-        '''
-
-    html = f'''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-            body {{
-                background-color: #0d0a0a;
-                background-image: radial-gradient(circle at center, rgba(150, 40, 0, 0.4) 0%, transparent 60%);
-                font-family: 'Inter', sans-serif; color: white; padding: 30px; width: 800px; margin: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased;
-            }}
-            .header {{ text-align: center; font-size: 26px; font-weight: 900; color: #ff9a44; text-shadow: 0 0 15px rgba(255, 120, 0, 0.8); margin-bottom: 25px; text-transform: uppercase; }}
-            .container {{ background: rgba(24, 25, 28, 0.4); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 14px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }}
-            .container-top {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }}
-            .top-label {{ font-size: 14px; font-weight: 800; color: #b0b5bd; display: flex; align-items: center; gap: 8px; }}
-            .voice-btn {{ background: rgba(30, 80, 40, 0.2); border: 1px solid rgba(60, 150, 60, 0.4); color: #4ade80; padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 800; display: flex; align-items: center; gap: 6px; text-shadow: 0 0 8px rgba(74, 222, 128, 0.4); }}
-            .card {{ background: #252321; border-radius: 12px; padding: 12px 18px; margin-bottom: 12px; display: flex; align-items: center; position: relative; }}
-            .card:last-child {{ margin-bottom: 0; }}
-            .card-1 {{ border: 2px solid #f6a125; box-shadow: 0 0 15px rgba(246,161,37,0.4), inset 0 0 10px rgba(246,161,37,0.2); background: rgba(45, 35, 25, 0.8); }}
-            .card-2 {{ border: 2px solid #57a6e5; box-shadow: 0 0 15px rgba(87,166,229,0.4), inset 0 0 10px rgba(87,166,229,0.2); background: rgba(25, 35, 45, 0.8); }}
-            .card-3 {{ border: 2px solid #e55757; box-shadow: 0 0 15px rgba(229,87,87,0.4), inset 0 0 10px rgba(229,87,87,0.2); background: rgba(45, 25, 25, 0.8); }}
-            .shield-container {{ width: 38px; height: 44px; position: relative; display: flex; justify-content: center; align-items: center; margin-right: 18px; flex-shrink: 0; }}
-            .shield-svg {{ position: absolute; width: 100%; height: 100%; top: 0; left: 0; }}
-            .rank-text {{ font-size: 14px; font-weight: 800; z-index: 2; }}
-            .avatar-container {{ width: 48px; height: 48px; border-radius: 50%; position: relative; margin-right: 18px; flex-shrink: 0; }}
-            .avatar-img {{ width: 100%; height: 100%; border-radius: 50%; background-size: cover; background-position: center; }}
-            .avatar-1 {{ box-shadow: 0 0 12px #f6a125; border: 2px solid #f6a125; }} .avatar-2 {{ box-shadow: 0 0 12px #57a6e5; border: 2px solid #57a6e5; }} .avatar-3 {{ box-shadow: 0 0 12px #e55757; border: 2px solid #e55757; }}
-            .player-info {{ flex: 1; display: flex; justify-content: space-between; align-items: center; }}
-            .player-name {{ font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 6px; color: #ffffff; text-transform: uppercase; text-shadow: 0 0 8px rgba(255, 255, 255, 0.3);}}
-            .streak-time {{ font-size: 16px; font-weight: 800; color: #f6a125; text-shadow: 0 0 10px rgba(246, 161, 37, 0.6); text-transform: uppercase; }}
-            .color-1 {{ color: #f6a125; }} .color-2 {{ color: #57a6e5; }} .color-3 {{ color: #e55757; }}
-            .outline-1 {{ color: #f6a125; filter: drop-shadow(0 0 4px rgba(246,161,37,0.8)); }} .outline-2 {{ color: #57a6e5; filter: drop-shadow(0 0 4px rgba(87,166,229,0.8)); }} .outline-3 {{ color: #e55757; filter: drop-shadow(0 0 4px rgba(229,87,87,0.8)); }}
-        </style>
-    </head>
-    <body>
-        <div class="header">🔥 ТОП СЕРІЇ В ВОЙСІ</div>
-        <div class="container">
-            <div class="container-top">
-                <div class="top-label">⬅ TOP STREAKS 🔥</div>
-                <div class="voice-btn">🎙 VOICE CHAT</div>
-            </div>
-            {cards_html}
-        </div>
-    </body>
-    </html>
-    '''
+    template = jinja_env.get_template('streaks_top.html')
+    html = template.render(top_streaks_data=top_streaks_data)
     return await render_html_to_image(html)
 
 async def generate_games_image(top_games_data, offset=0, show_header=True):
-    cards_html = ""
-    for i, g in enumerate(top_games_data):
-        rank = i + 1 + offset
-        g_name = g.get('name', 'Unknown')
-        g_time = g.get('time', '0 h')
-        g_icon = g.get('icon_url', '') or 'https://via.placeholder.com/56x56/2a2a2a/2a2a2a'
-        c_class = rank if rank <= 7 else 7
-        
-        players_html = ""
-        for pl in g.get('players', []):
-            p_name = pl.get('name', '')
-            p_time = pl.get('time', '')
-            p_av = pl.get('avatar_url', '') or 'https://ui-avatars.com/api/?background=random&name=' + p_name.replace(" ", "+")
-            
-            players_html += f'''
-            <div class="player-row">
-                <div class="player-left"><div class="player-avatar" style="background-image: url('{p_av}');"></div><div class="player-name">{p_name}</div></div>
-                <div class="player-time">{p_time}</div>
-            </div>
-            '''
-
-        cards_html += f'''
-        <div class="card card-{c_class}">
-            <div class="shield-container rank-{c_class}">
-                <svg class="shield-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                </svg>
-                <div class="rank-text">#{rank}</div>
-            </div>
-            <div class="game-icon" style="background-image: url('{g_icon}');"></div>
-            <div class="game-info">
-                <div class="game-title-row">
-                    <div class="game-name">{g_name}</div>
-                    <div class="game-time">{g_time}</div>
-                </div>
-                {players_html}
-            </div>
-        </div>
-        '''
-
-    header_html = '<div class="header">ТОП ІГОР (ЗА ВЕСЬ ЧАС)</div>' if show_header else '<div class="header" style="opacity: 0; user-select: none;">ТОП ІГОР (ЗА ВЕСЬ ЧАС)</div>'
-
-    html = f'''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-            body {{
-                background-color: #0f0a0a;
-                background-image: radial-gradient(circle at 10% 50%, rgba(100, 20, 20, 0.8) 0%, transparent 50%),
-                                  radial-gradient(circle at 90% 80%, rgba(150, 30, 20, 0.6) 0%, transparent 40%);
-                font-family: 'Inter', sans-serif; color: white; padding: 30px; width: 800px; margin: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased;
-            }}
-            .container {{ padding: 20px; display: flex; flex-direction: column; gap: 12px; box-sizing: border-box; }}
-            .header {{ text-align: center; color: #ff7666; font-size: 24px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; filter: drop-shadow(0 0 10px rgba(255, 118, 102, 0.4)); }}
-            .card {{ background: linear-gradient(145deg, rgba(30, 20, 20, 0.9), rgba(15, 10, 10, 0.95)); border-radius: 14px; padding: 14px 18px; display: flex; align-items: stretch; position: relative; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid rgba(255, 118, 102, 0.15); margin-bottom: 0; }}
-            .card:last-child {{ margin-bottom: 0; }}
-            .card-1 {{ border: 2px solid #f6a125; box-shadow: 0 0 15px rgba(246,161,37,0.4), inset 0 0 10px rgba(246,161,37,0.2); }}
-            .card-2 {{ border: 2px solid #57a6e5; box-shadow: 0 0 15px rgba(87,166,229,0.4), inset 0 0 10px rgba(87,166,229,0.2); }}
-            .card-3 {{ border: 2px solid #e55757; box-shadow: 0 0 15px rgba(229,87,87,0.4), inset 0 0 10px rgba(229,87,87,0.2); }}
-            .card-4 {{ border: 2px solid #f7872a; box-shadow: 0 0 12px rgba(247,135,42,0.35), inset 0 0 8px rgba(247,135,42,0.15); }}
-            .card-5 {{ border: 2px solid #f7872a; box-shadow: 0 0 12px rgba(247,135,42,0.35), inset 0 0 8px rgba(247,135,42,0.15); }}
-            .card-6 {{ border: 2px solid #f7872a; box-shadow: 0 0 12px rgba(247,135,42,0.35), inset 0 0 8px rgba(247,135,42,0.15); }}
-            .card-7 {{ border: 2px solid #f7872a; box-shadow: 0 0 12px rgba(247,135,42,0.35), inset 0 0 8px rgba(247,135,42,0.15); }}
-            .card::before {{ content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255, 118, 102, 0.4), transparent); }}
-            .shield-container {{ width: 40px; height: 46px; position: relative; display: flex; justify-content: center; align-items: center; margin-right: 14px; flex-shrink: 0; }}
-            .shield-svg {{ position: absolute; width: 100%; height: 100%; top: 0; left: 0; }}
-            .rank-text {{ font-size: 15px; font-weight: 800; z-index: 2; margin-top: -2px; }}
-            .game-icon {{ width: 56px; height: 56px; border-radius: 10px; margin-right: 16px; flex-shrink: 0; background-color: #2a2a2a; border: 1px solid rgba(255,255,255,0.05); background-size: cover; background-position: center; }}
-            .game-info {{ flex: 1; display: flex; flex-direction: column; justify-content: center; }}
-            .game-title-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }}
-            .game-name {{ font-size: 18px; font-weight: 800; color: #ff7666; text-shadow: 0 0 10px rgba(255, 118, 102, 0.8), 0 0 20px rgba(255, 118, 102, 0.4); }}
-            .game-time {{ font-size: 18px; font-weight: 800; color: #f7a93b; text-shadow: 0 0 10px rgba(247, 169, 59, 0.8), 0 0 20px rgba(247, 169, 59, 0.4); }}
-            .player-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }}
-            .player-row:last-child {{ margin-bottom: 0; }}
-            .player-left {{ display: flex; align-items: center; }}
-            .player-avatar {{ width: 18px; height: 18px; border-radius: 50%; background: #ccc; margin-right: 7px; background-size: cover; background-position: center; }}
-            .player-name {{ font-size: 14px; color: #c4cdd5; font-weight: 700; }}
-            .player-time {{ font-size: 14px; color: #e5c487; font-weight: 700; text-shadow: 0 0 8px rgba(229, 196, 135, 0.7); }}
-            .rank-1 {{ color: #f6a125; filter: drop-shadow(0 0 6px rgba(246,161,37,0.8)); }}
-            .rank-2 {{ color: #57a6e5; filter: drop-shadow(0 0 6px rgba(87,166,229,0.8)); }}
-            .rank-3 {{ color: #e55757; filter: drop-shadow(0 0 6px rgba(229,87,87,0.8)); }}
-            .rank-4 {{ color: #f7872a; filter: drop-shadow(0 0 6px rgba(247,135,42,0.7)); }}
-            .rank-5 {{ color: #f7872a; filter: drop-shadow(0 0 6px rgba(247,135,42,0.7)); }}
-            .rank-6 {{ color: #f7872a; filter: drop-shadow(0 0 6px rgba(247,135,42,0.7)); }}
-            .rank-7 {{ color: #f7872a; filter: drop-shadow(0 0 6px rgba(247,135,42,0.7)); }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            {header_html}
-            {cards_html}
-        </div>
-    </body>
-    </html>
-    '''
+    template = jinja_env.get_template('games_top.html')
+    html = template.render(top_games_data=top_games_data, offset=offset, show_header=show_header)
     return await render_html_to_image(html)

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+        body {
+            background-color: #0d0a0a;
+            background-image: radial-gradient(circle at center, rgba(150, 40, 0, 0.4) 0%, transparent 60%);
+            font-family: 'Inter', sans-serif; color: white; padding: 30px; width: 800px; margin: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased;
+        }
+        .header { text-align: center; font-size: 26px; font-weight: 900; color: #ff9a44; text-shadow: 0 0 15px rgba(255, 120, 0, 0.8); margin-bottom: 25px; text-transform: uppercase; }
+        .container { background: rgba(24, 25, 28, 0.4); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 14px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }
+        .container-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .top-label { font-size: 14px; font-weight: 800; color: #b0b5bd; display: flex; align-items: center; gap: 8px; }
+        .voice-btn { background: rgba(30, 80, 40, 0.2); border: 1px solid rgba(60, 150, 60, 0.4); color: #4ade80; padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 800; display: flex; align-items: center; gap: 6px; text-shadow: 0 0 8px rgba(74, 222, 128, 0.4); }
+        .card { background: #252321; border-radius: 12px; padding: 12px 18px; margin-bottom: 12px; display: flex; align-items: center; position: relative; }
+        .card:last-child { margin-bottom: 0; }
+        .card-1 { border: 2px solid #f6a125; box-shadow: 0 0 15px rgba(246,161,37,0.4), inset 0 0 10px rgba(246,161,37,0.2); background: rgba(45, 35, 25, 0.8); }
+        .card-2 { border: 2px solid #57a6e5; box-shadow: 0 0 15px rgba(87,166,229,0.4), inset 0 0 10px rgba(87,166,229,0.2); background: rgba(25, 35, 45, 0.8); }
+        .card-3 { border: 2px solid #e55757; box-shadow: 0 0 15px rgba(229,87,87,0.4), inset 0 0 10px rgba(229,87,87,0.2); background: rgba(45, 25, 25, 0.8); }
+        .shield-container { width: 38px; height: 44px; position: relative; display: flex; justify-content: center; align-items: center; margin-right: 18px; flex-shrink: 0; }
+        .shield-svg { position: absolute; width: 100%; height: 100%; top: 0; left: 0; }
+        .rank-text { font-size: 14px; font-weight: 800; z-index: 2; }
+        .avatar-container { width: 48px; height: 48px; border-radius: 50%; position: relative; margin-right: 18px; flex-shrink: 0; }
+        .avatar-img { width: 100%; height: 100%; border-radius: 50%; background-size: cover; background-position: center; }
+        .avatar-1 { box-shadow: 0 0 12px #f6a125; border: 2px solid #f6a125; } .avatar-2 { box-shadow: 0 0 12px #57a6e5; border: 2px solid #57a6e5; } .avatar-3 { box-shadow: 0 0 12px #e55757; border: 2px solid #e55757; }
+        .player-info { flex: 1; display: flex; justify-content: space-between; align-items: center; }
+        .player-name { font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 6px; color: #ffffff; text-transform: uppercase; text-shadow: 0 0 8px rgba(255, 255, 255, 0.3);}
+        .streak-time { font-size: 16px; font-weight: 800; color: #f6a125; text-shadow: 0 0 10px rgba(246, 161, 37, 0.6); text-transform: uppercase; }
+        .color-1 { color: #f6a125; } .color-2 { color: #57a6e5; } .color-3 { color: #e55757; }
+        .outline-1 { color: #f6a125; filter: drop-shadow(0 0 4px rgba(246,161,37,0.8)); } .outline-2 { color: #57a6e5; filter: drop-shadow(0 0 4px rgba(87,166,229,0.8)); } .outline-3 { color: #e55757; filter: drop-shadow(0 0 4px rgba(229,87,87,0.8)); }
+    </style>
+</head>
+<body>
+    <div class="header">🔥 ТОП СЕРІЇ В ВОЙСІ</div>
+    <div class="container">
+        <div class="container-top">
+            <div class="top-label">⬅ TOP STREAKS 🔥</div>
+            <div class="voice-btn">🎙 VOICE CHAT</div>
+        </div>
+        
+        {% for p in top_streaks_data %}
+            {% set rank = loop.index %}
+            {% set c_class = rank if rank <= 3 else 3 %}
+            {% set name = p.get('name', 'Unknown') %}
+            {% set time = p.get('streak', '0') %}
+            {% set avatar = p.get('avatar_url', '') or ('https://ui-avatars.com/api/?background=random&name=' ~ name | replace(' ', '+')) %}
+            
+            <div class="card card-{{ c_class }}">
+                <div class="shield-container outline-{{ c_class }}">
+                    <svg class="shield-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                    </svg>
+                    <div class="rank-text color-{{ c_class }}">#{{ rank }}</div>
+                </div>
+                <div class="avatar-container avatar-{{ c_class }}"><div class="avatar-img" style="background-image: url('{{ avatar }}');"></div></div>
+                <div class="player-info">
+                    <div class="player-name">{{ name }} 🔥</div>
+                    <div class="streak-time">{{ time }}</div>
+                </div>
+            </div>
+        {% endfor %}
+        
+    </div>
+</body>
+</html>
