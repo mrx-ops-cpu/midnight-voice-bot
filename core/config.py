@@ -5,7 +5,6 @@ GLOBAL_SETTINGS = {
     "monitoring":  True,
     "voice_guard": True,
     "voice_stats": True,
-    "voice_ai_enabled": True,
     "version":     "v4.4.11",
     "image_url":   "https://cdn.discordapp.com/avatars/1492662597357404211/a_4bf48afaac3798695e46c007ce568803.gif?size=1024",
     "start_time":  datetime.now(timezone.utc)
@@ -25,7 +24,6 @@ ROOMS_FILE         = os.path.join(DATA_DIR, "active_rooms.json")
 MSG_FILE           = os.path.join(DATA_DIR, "message_ids.json")
 FACEIT_FILE        = os.path.join(DATA_DIR, "faceit_users.json")
 FACEIT_DASHBOARD_FILE = os.path.join(DATA_DIR, "faceit_dashboard.json")
-MAFIA_FILE         = os.path.join(DATA_DIR, "mafia_stats.json")
 BOT_VOICE_FILE     = os.path.join(DATA_DIR, "bot_voice.json")
 MONITOR_CHANNEL_FILE = os.path.join(DATA_DIR, "monitor_channel.json")
 HIDDEN_GAMES_FILE  = os.path.join(DATA_DIR, "hidden_games.json")
