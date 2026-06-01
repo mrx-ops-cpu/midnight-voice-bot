@@ -13,9 +13,9 @@ class SayModal(discord.ui.Modal, title='Сказати у войс'):
     text_input = discord.ui.TextInput(
         label='Текст для озвучення',
         style=discord.TextStyle.paragraph,
-        placeholder='Привіт всім!',
+        placeholder='Привіт, друзі!',
         required=True,
-        max_length=200
+        max_length=1000
     )
 
     def __init__(self, bot):
@@ -57,92 +57,102 @@ class AdminPanel(discord.ui.View):
     def __init__(self, bot):
         super().__init__()
         self.bot = bot
-        self.update_buttons()
-
-    def update_buttons(self):
-        self.btn_monitoring.style = discord.ButtonStyle.green if config.GLOBAL_SETTINGS["monitoring"] else discord.ButtonStyle.red
-        self.btn_monitoring.label = f"🎮 Моніторинг ({'ON' if config.GLOBAL_SETTINGS['monitoring'] else 'OFF'})"
         
-        self.btn_voice.style = discord.ButtonStyle.green if config.GLOBAL_SETTINGS["voice_guard"] else discord.ButtonStyle.red
-        self.btn_voice.label = f"🎙️ Войс-гард ({'ON' if config.GLOBAL_SETTINGS['voice_guard'] else 'OFF'})"
+        options = [
+            discord.SelectOption(label="Перемкнути Моніторинг", emoji="🎮", value="monitoring"),
+            discord.SelectOption(label="Перемкнути Войс-гард", emoji="🎙️", value="voice_guard"),
+            discord.SelectOption(label="Перемкнути Статистику", emoji="📊", value="stats"),
+            discord.SelectOption(label="Ліміт /say", emoji="⚙️", value="limit"),
+            discord.SelectOption(label="Бекап", emoji="💾", value="backup"),
+        ]
         
-        self.btn_stats.style = discord.ButtonStyle.green if config.GLOBAL_SETTINGS["voice_stats"] else discord.ButtonStyle.red
-        self.btn_stats.label = f"📊 Статистика ({'ON' if config.GLOBAL_SETTINGS['voice_stats'] else 'OFF'})"
+        self.select = discord.ui.Select(placeholder="Оберіть дію...", options=options)
+        self.select.callback = self.select_callback
+        self.add_item(self.select)
 
-    @discord.ui.button(custom_id="admin_mon", row=0)
-    async def btn_monitoring(self, interaction: discord.Interaction, button: discord.ui.Button):
-        config.GLOBAL_SETTINGS["monitoring"] = not config.GLOBAL_SETTINGS["monitoring"]
-        self.update_buttons()
-        await interaction.response.edit_message(view=self)
+    async def select_callback(self, interaction: discord.Interaction):
+        val = self.select.values[0]
+        if val == "monitoring":
+            config.GLOBAL_SETTINGS["monitoring"] = not config.GLOBAL_SETTINGS["monitoring"]
+            await interaction.response.edit_message(embed=self.get_embed())
+        elif val == "voice_guard":
+            config.GLOBAL_SETTINGS["voice_guard"] = not config.GLOBAL_SETTINGS["voice_guard"]
+            if not config.GLOBAL_SETTINGS["voice_guard"]:
+                for vc in self.bot.voice_clients:
+                    await vc.disconnect()
+            await interaction.response.edit_message(embed=self.get_embed())
+        elif val == "stats":
+            config.GLOBAL_SETTINGS["voice_stats"] = not config.GLOBAL_SETTINGS["voice_stats"]
+            await interaction.response.edit_message(embed=self.get_embed())
+        elif val == "limit":
+            await interaction.response.send_modal(SayLimitModal())
+        elif val == "backup":
+            await interaction.response.defer(ephemeral=True)
+            zip_path = shutil.make_archive("midnight_backup", 'zip', config.DATA_DIR)
+            embed = discord.Embed(title="⬛ Резервне копіювання", description="▫️ Бази запаковані.", color=0x2b2d31)
+            await interaction.followup.send(embed=embed, file=discord.File(zip_path))
+            os.remove(zip_path)
 
-    @discord.ui.button(custom_id="admin_voice", row=0)
-    async def btn_voice(self, interaction: discord.Interaction, button: discord.ui.Button):
-        config.GLOBAL_SETTINGS["voice_guard"] = not config.GLOBAL_SETTINGS["voice_guard"]
-        if not config.GLOBAL_SETTINGS["voice_guard"]:
-            for vc in self.bot.voice_clients:
-                await vc.disconnect()
-        self.update_buttons()
-        await interaction.response.edit_message(view=self)
-
-    @discord.ui.button(custom_id="admin_stats", row=0)
-    async def btn_stats(self, interaction: discord.Interaction, button: discord.ui.Button):
-        config.GLOBAL_SETTINGS["voice_stats"] = not config.GLOBAL_SETTINGS["voice_stats"]
-        self.update_buttons()
-        await interaction.response.edit_message(view=self)
-
-    @discord.ui.button(label="⚙️ Ліміт /say", style=discord.ButtonStyle.secondary, custom_id="admin_limit", row=1)
-    async def btn_limit(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(SayLimitModal())
-
-    @discord.ui.button(label="💾 Бекап", style=discord.ButtonStyle.primary, custom_id="admin_backup", row=1)
-    async def btn_backup(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer(ephemeral=True)
-        zip_path = shutil.make_archive("midnight_backup", 'zip', config.DATA_DIR)
-        embed = discord.Embed(title="⬛ Резервне копіювання", description="▫️ Бази запаковані.", color=0x2b2d31)
-        await interaction.followup.send(embed=embed, file=discord.File(zip_path))
-        os.remove(zip_path)
+    def get_embed(self):
+        m = "🟢 Увімкнено" if config.GLOBAL_SETTINGS["monitoring"] else "🔴 Вимкнено"
+        v = "🟢 Увімкнено" if config.GLOBAL_SETTINGS["voice_guard"] else "🔴 Вимкнено"
+        s = "🟢 Увімкнено" if config.GLOBAL_SETTINGS["voice_stats"] else "🔴 Вимкнено"
+        l = "Безліміт" if config.SAY_LIMIT == 0 else f"{config.SAY_LIMIT} символів"
+        
+        embed = discord.Embed(title="⬛ Midnight Admin Panel", description="Оберіть дію в меню нижче, щоб змінити налаштування.", color=0x2b2d31)
+        embed.add_field(name="🎮 Моніторинг", value=m, inline=True)
+        embed.add_field(name="🎙️ Войс-гард", value=v, inline=True)
+        embed.add_field(name="📊 Статистика", value=s, inline=True)
+        embed.add_field(name="⚙️ Ліміт /say", value=l, inline=True)
+        return embed
 
 class UserPanel(discord.ui.View):
     def __init__(self, cog):
         super().__init__()
         self.cog = cog
+        
+        options = [
+            discord.SelectOption(label="Моя статистика", description="Показує твої години", emoji="👤", value="profile"),
+            discord.SelectOption(label="Топ сервера", description="Найактивніші гравці", emoji="🏆", value="top"),
+            discord.SelectOption(label="Хто грає", description="Лайв матчі", emoji="🎮", value="games"),
+            discord.SelectOption(label="Сказати у войс", description="Озвучити текст", emoji="🗣️", value="say"),
+        ]
+        
+        self.select = discord.ui.Select(placeholder="Меню команд...", options=options)
+        self.select.callback = self.select_callback
+        self.add_item(self.select)
 
-    @discord.ui.button(label="👤 Моя статистика", style=discord.ButtonStyle.primary, custom_id="user_profile")
-    async def btn_profile(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.cog._send_stats(interaction)
-
-    @discord.ui.button(label="🏆 Топ сервера", style=discord.ButtonStyle.success, custom_id="user_top")
-    async def btn_top(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not config.GLOBAL_SETTINGS["voice_stats"]:
-            return await interaction.response.send_message("❌ Вимкнено", ephemeral=True)
-        s = database.load_stats()
-        data = dict(s.get("total", {}))
-        for uid, start in config.voice_start_times.items():
-            k = str(uid)
-            data[k] = data.get(k, 0) + (datetime.now().timestamp() - start)
-        top = sorted(data.items(), key=lambda x: x[1], reverse=True)[:10]
-        medals = ["🥇", "🥈", "🥉"]
-        lines = []
-        for i, (uid, sec) in enumerate(top):
-            name = database.get_display_name(uid, interaction.guild, self.cog.bot)
-            medal = medals[i] if i < 3 else f"**{i+1}.**"
-            lines.append(f"{medal} {name}{utils.streak_emoji(uid)} — `{utils.format_time(sec)}`")
-        embed = discord.Embed(title=f"🏆 Топ активності | Весь час", description="\n".join(lines) or "Немає даних", color=0x2b2d31)
-        embed.set_footer(text=utils.midnight_footer())
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-    @discord.ui.button(label="🎮 Хто грає", style=discord.ButtonStyle.secondary, custom_id="user_games")
-    async def btn_games(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = utils.build_live_embed(interaction.guild, self.cog.bot)
-        embed.set_footer(text=utils.midnight_footer())
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-    @discord.ui.button(label="🗣️ Сказати у войс", style=discord.ButtonStyle.danger, custom_id="user_say")
-    async def btn_say(self, interaction: discord.Interaction, button: discord.ui.Button):
-        vc = discord.utils.get(self.cog.bot.voice_clients, guild=interaction.guild)
-        if vc and vc.is_playing():
-            return await interaction.response.send_message("❌ Зачекай, я ще не закінчив говорити!", ephemeral=True)
-        await interaction.response.send_modal(SayModal(self.cog.bot))
+    async def select_callback(self, interaction: discord.Interaction):
+        val = self.select.values[0]
+        if val == "profile":
+            await self.cog._send_stats(interaction)
+        elif val == "top":
+            if not config.GLOBAL_SETTINGS["voice_stats"]:
+                return await interaction.response.send_message("❌ Вимкнено", ephemeral=True)
+            s = database.load_stats()
+            data = dict(s.get("total", {}))
+            for uid, start in config.voice_start_times.items():
+                k = str(uid)
+                data[k] = data.get(k, 0) + (datetime.now().timestamp() - start)
+            top = sorted(data.items(), key=lambda x: x[1], reverse=True)[:10]
+            medals = ["🥇", "🥈", "🥉"]
+            lines = []
+            for i, (uid, sec) in enumerate(top):
+                name = database.get_display_name(uid, interaction.guild, self.cog.bot)
+                medal = medals[i] if i < 3 else f"**{i+1}.**"
+                lines.append(f"{medal} {name}{utils.streak_emoji(uid)} — `{utils.format_time(sec)}`")
+            embed = discord.Embed(title=f"🏆 Топ активності | Весь час", description="\n".join(lines) or "Немає даних", color=0x2b2d31)
+            embed.set_footer(text=utils.midnight_footer())
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        elif val == "games":
+            embed = utils.build_live_embed(interaction.guild, self.cog.bot)
+            embed.set_footer(text=utils.midnight_footer())
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        elif val == "say":
+            vc = discord.utils.get(self.cog.bot.voice_clients, guild=interaction.guild)
+            if vc and vc.is_playing():
+                return await interaction.response.send_message("❌ Зачекай, я ще не закінчив говорити!", ephemeral=True)
+            await interaction.response.send_modal(SayModal(self.cog.bot))
 
 class CommandsCog(commands.Cog):
     def __init__(self, bot):
@@ -200,8 +210,8 @@ class CommandsCog(commands.Cog):
     @app_commands.command(name="say", description="Озвучити текст у войсі")
     @app_commands.describe(text="Що сказати")
     async def say_cmd(self, interaction: discord.Interaction, text: str):
-        if len(text) > 200:
-            return await interaction.response.send_message("❌ Максимум 200 символів", ephemeral=True)
+        if len(text) > 1000:
+            return await interaction.response.send_message("❌ Максимум 1000 символів", ephemeral=True)
             
         vc = discord.utils.get(self.bot.voice_clients, guild=interaction.guild)
         if vc and vc.is_playing():
@@ -222,13 +232,38 @@ class CommandsCog(commands.Cog):
     async def admin_panel_cmd(self, interaction: discord.Interaction):
         if not interaction.user.guild_permissions.administrator:
             return await interaction.response.send_message("❌ Тільки адміни", ephemeral=True)
-        embed = discord.Embed(title="⚙️ Адмін-панель", description="Керування функціями бота", color=0x2b2d31)
-        await interaction.response.send_message(embed=embed, view=AdminPanel(self.bot), ephemeral=True)
+        view = AdminPanel(self.bot)
+        await interaction.response.send_message(embed=view.get_embed(), view=view, ephemeral=True)
 
     @app_commands.command(name="menu", description="🌑 Головне меню гравця")
     async def user_menu_cmd(self, interaction: discord.Interaction):
-        embed = discord.Embed(title="🌑 Midnight Menu", description="Оберіть потрібну дію:", color=0x2b2d31)
+        embed = discord.Embed(
+            title="💜 Midnight User Menu", 
+            description=f"Привіт, {interaction.user.mention}! Оберіть команду в меню нижче:", 
+            color=0x2b2d31
+        )
         await interaction.response.send_message(embed=embed, view=UserPanel(self), ephemeral=True)
+
+    @app_commands.command(name="help", description="❓ Довідка по всім командам")
+    async def help_cmd(self, interaction: discord.Interaction):
+        embed = discord.Embed(title="💜 Команди сервера", description="Список усіх доступних команд бота:", color=0x2b2d31)
+        
+        embed.add_field(name="👤 Для гравців", value="""
+`/profile` — 📊 Ваша особиста статистика
+`/top` — 🏆 Загальний топ сервера (войс та ігри)
+`/menu` — 🌑 Інтерактивне головне меню
+`/say` — 🗣️ Озвучити текст у голосовому каналі
+`/ping` — 🏓 Перевірити швидкість бота
+        """, inline=False)
+        
+        if interaction.user.guild_permissions.administrator:
+            embed.add_field(name="👑 Для адміністраторів", value="""
+`/admin` — ⚙️ Панель налаштувань бота (вкл/викл функцій)
+`/sync` — 🔄 Синхронізація команд
+            """, inline=False)
+            
+        embed.set_footer(text=utils.midnight_footer())
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @app_commands.command(name="ping", description="Затримка та аптайм")
     async def ping_cmd(self, interaction: discord.Interaction):
@@ -241,6 +276,36 @@ class CommandsCog(commands.Cog):
         embed.add_field(name="📡 Затримка", value=f"`{lat}ms`", inline=True)
         embed.add_field(name="⏱️ Аптайм", value=f"`{h}г {r//60}хв`", inline=True)
         embed.add_field(name="🔢 Версія", value=f"`{config.GLOBAL_SETTINGS['version']}`", inline=True)
+        embed.set_footer(text=utils.midnight_footer())
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="profile", description="📊 Ваша особиста статистика")
+    async def profile_cmd(self, interaction: discord.Interaction):
+        await self._send_stats(interaction)
+
+    @app_commands.command(name="top", description="🏆 Топ активності сервера")
+    async def top_cmd(self, interaction: discord.Interaction):
+        if not config.GLOBAL_SETTINGS["voice_stats"]:
+            return await interaction.response.send_message("❌ Статистика вимкнена", ephemeral=True)
+        s = database.load_stats()
+        data = dict(s.get("total", {}))
+        for uid, start in config.voice_start_times.items():
+            k = str(uid)
+            data[k] = data.get(k, 0) + (datetime.now().timestamp() - start)
+        top = sorted(data.items(), key=lambda x: x[1], reverse=True)[:10]
+        medals = ["🥇", "🥈", "🥉"]
+        lines = []
+        for i, (uid, sec) in enumerate(top):
+            name = database.get_display_name(uid, interaction.guild, self.bot)
+            medal = medals[i] if i < 3 else f"**{i+1}.**"
+            lines.append(f"{medal} {name}{utils.streak_emoji(uid)} — `{utils.format_time(sec)}`")
+        embed = discord.Embed(title=f"🏆 Топ активності | Весь час", description="\n".join(lines) or "Немає даних", color=0x2b2d31)
+        embed.set_footer(text=utils.midnight_footer())
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="games", description="🎮 Лайв матчі")
+    async def games_cmd(self, interaction: discord.Interaction):
+        embed = utils.build_live_embed(interaction.guild, self.bot)
         embed.set_footer(text=utils.midnight_footer())
         await interaction.response.send_message(embed=embed, ephemeral=True)
 

@@ -50,5 +50,5 @@ last_fame_games_hash   = None
 last_fame_games_2_hash = None
 last_fame_games_3_hash = None
 
-SAY_LIMIT         = 3
+SAY_LIMIT         = 1000
 say_usage         = {}
