@@ -6,4 +6,5 @@ python-dotenv
 aiohttp
 edge-tts
 Pillow
-playwrightJinja2
+playwright
+Jinja2
