@@ -259,11 +259,30 @@ class CommandsCog(commands.Cog):
         if interaction.user.guild_permissions.administrator:
             embed.add_field(name="👑 Для адміністраторів", value="""
 `/admin` — ⚙️ Панель налаштувань бота (вкл/викл функцій)
+`/al` — 🔥 Встановити стрік гравцю
 `/sync` — 🔄 Синхронізація команд
             """, inline=False)
             
         embed.set_footer(text=utils.midnight_footer())
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="al", description="🔥 Встановити стрік гравцю (тільки адмін)")
+    @app_commands.describe(user="Гравець", streak="Кількість днів стріку")
+    async def set_streak_cmd(self, interaction: discord.Interaction, user: discord.Member, streak: int):
+        if not interaction.user.guild_permissions.administrator:
+            return await interaction.response.send_message("❌ Тільки адміни", ephemeral=True)
+        if streak < 0:
+            return await interaction.response.send_message("❌ Стрік не може бути від'ємним", ephemeral=True)
+        
+        s = database.load_stats()
+        today = database.get_kyiv_date()
+        s.setdefault("streaks", {})[str(user.id)] = {"last_date": today, "count": streak}
+        database.save_stats(s)
+        
+        if streak == 0:
+            await interaction.response.send_message(f"🔥 Стрік {user.mention} скинуто до **0**", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"✅ Стрік {user.mention} встановлено на **{streak}** 🔥", ephemeral=True)
 
     @app_commands.command(name="ping", description="Затримка та аптайм")
     async def ping_cmd(self, interaction: discord.Interaction):

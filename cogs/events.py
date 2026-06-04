@@ -1,7 +1,7 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from core import config, database, utils
 
 def get_valid_games(member):
@@ -27,8 +27,37 @@ def get_valid_games(member):
 class EventsCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-
         self.last_greeted = {}
+
+    async def cog_load(self):
+        self.midnight_streak_check.start()
+
+    async def cog_unload(self):
+        self.midnight_streak_check.cancel()
+
+    @tasks.loop(minutes=5)
+    async def midnight_streak_check(self):
+        """Every 5 min, check if anyone in voice crossed midnight. If so, save their time and update streak."""
+        if not config.GLOBAL_SETTINGS["voice_stats"]:
+            return
+        now = datetime.now().timestamp()
+        kyiv_today = database.get_kyiv_date()
+        for uid in list(config.voice_start_times.keys()):
+            last_save = config.voice_last_save.get(uid, config.voice_start_times[uid])
+            # Calculate the Kyiv date when the last save happened
+            last_save_dt = datetime.fromtimestamp(last_save, tz=timezone.utc) + timedelta(hours=3)
+            last_save_date = last_save_dt.date().isoformat()
+            if last_save_date != kyiv_today:
+                # Midnight crossed! Save the accumulated time and update streak
+                duration = now - last_save
+                if duration > 0:
+                    database.add_voice_time_only(uid, duration)
+                    config.voice_last_save[uid] = now
+                    database.save_voice_sessions()
+
+    @midnight_streak_check.before_loop
+    async def before_midnight_check(self):
+        await self.bot.wait_until_ready()
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
