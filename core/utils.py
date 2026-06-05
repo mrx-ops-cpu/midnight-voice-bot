@@ -289,7 +289,7 @@ async def update_fame_message(guild, bot):
             "arena breakout: infinite": "https://cdn.akamai.steamstatic.com/steam/apps/2073620/header.jpg",
             "forza horizon 6": "https://cdn.akamai.steamstatic.com/steam/apps/1551360/header.jpg",
             "forza horizon 5": "https://cdn.akamai.steamstatic.com/steam/apps/1551360/header.jpg",
-            "fortnite": "https://cdn2.unrealengine.com/14br-consolecc-702x702-71ab13db8949.jpg",
+            "fortnite": "https://upload.wikimedia.org/wikipedia/commons/7/7c/Fortnite_F_letterance_logo.png",
             "visual studio code": "https://raw.githubusercontent.com/microsoft/vscode/main/resources/win32/code_150x150.png",
             "outplayed": "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/1f3ae.png",
             "arizona role play": "https://cdn.akamai.steamstatic.com/steam/apps/12120/header.jpg",
