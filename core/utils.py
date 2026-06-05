@@ -1,6 +1,7 @@
 import discord
 import asyncio
 import os
+import base64
 import shutil
 import subprocess
 import tempfile
@@ -10,6 +11,17 @@ from datetime import datetime, timezone
 import edge_tts
 
 from core import config, database
+
+# Load local game icons as base64 data URIs (for games not on Steam CDN)
+def _load_local_icon(filename):
+    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", filename)
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode()
+        return f"data:image/png;base64,{b64}"
+    return ""
+
+_fortnite_icon = _load_local_icon("fortnite.png")
 
 def ensure_ffmpeg():
     found = shutil.which("ffmpeg")
@@ -289,7 +301,7 @@ async def update_fame_message(guild, bot):
             "arena breakout: infinite": "https://cdn.akamai.steamstatic.com/steam/apps/2073620/header.jpg",
             "forza horizon 6": "https://cdn.akamai.steamstatic.com/steam/apps/1551360/header.jpg",
             "forza horizon 5": "https://cdn.akamai.steamstatic.com/steam/apps/1551360/header.jpg",
-            "fortnite": "https://cdn.akamai.steamstatic.com/steam/apps/1665460/header.jpg",
+            "fortnite": _fortnite_icon,
             "visual studio code": "https://raw.githubusercontent.com/microsoft/vscode/main/resources/win32/code_150x150.png",
             "outplayed": "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/1f3ae.png",
             "arizona role play": "https://cdn.akamai.steamstatic.com/steam/apps/12120/header.jpg",
