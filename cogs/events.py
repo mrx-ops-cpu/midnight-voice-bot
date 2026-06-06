@@ -48,10 +48,10 @@ class EventsCog(commands.Cog):
             last_save_dt = datetime.fromtimestamp(last_save, tz=timezone.utc) + timedelta(hours=3)
             last_save_date = last_save_dt.date().isoformat()
             if last_save_date != kyiv_today:
-                # Midnight crossed! Save the accumulated time and update streak
+                # Midnight crossed! Save the accumulated time and update streak for the PREVIOUS day
                 duration = now - last_save
                 if duration > 0:
-                    database.add_voice_time_only(uid, duration)
+                    database.add_voice_time_only(uid, duration, custom_today=last_save_date)
                     config.voice_last_save[uid] = now
                     database.save_voice_sessions()
 
