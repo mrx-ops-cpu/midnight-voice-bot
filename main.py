@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 import os
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from threading import Thread
 from flask import Flask, render_template
 
@@ -150,8 +150,21 @@ async def on_ready():
         for channel in guild.voice_channels:
             for member in channel.members:
                 if member.bot: continue
-                config.voice_start_times[member.id] = saved_vs.get(member.id, datetime.now().timestamp())
-                config.voice_last_save[member.id] = datetime.now().timestamp()
+                saved_time = saved_vs.get(member.id)
+                now_ts = datetime.now().timestamp()
+                
+                if saved_time:
+                    # Bot was restarted while user was in voice
+                    # Save the unsaved time and update streak for the day they were active
+                    unsaved_duration = now_ts - saved_time
+                    if unsaved_duration > 0:
+                        # Determine which Kyiv date the saved_time belongs to
+                        saved_dt = datetime.fromtimestamp(saved_time, tz=timezone.utc) + timedelta(hours=3)
+                        saved_date = saved_dt.date().isoformat()
+                        database.add_voice_time_only(member.id, unsaved_duration, custom_today=saved_date)
+                
+                config.voice_start_times[member.id] = now_ts
+                config.voice_last_save[member.id] = now_ts
 
     now = datetime.now().timestamp()
     

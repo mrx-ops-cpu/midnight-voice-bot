@@ -467,7 +467,7 @@ class CommandsCog(commands.Cog):
             try: await channel.connect(timeout=20.0, reconnect=True)
             except: pass
             
-        await interaction.response.send_message(f"✅ Бот тепер завжди буде сидіти у **{channel.name}**!")
+        await interaction.response.send_message(f"✅ Бот тепер завжди буде сидіти у **{channel.name}**!", ephemeral=True)
 
     @app_commands.command(name="setmonitorchannel", description="Обрати канал для Активних каток та Залу Слави")
     @app_commands.describe(channel="Текстовий канал")
