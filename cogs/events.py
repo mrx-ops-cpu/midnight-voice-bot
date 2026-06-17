@@ -37,23 +37,11 @@ class EventsCog(commands.Cog):
 
     @tasks.loop(minutes=5)
     async def midnight_streak_check(self):
-        """Every 5 min, check if anyone in voice crossed midnight. If so, save their time and update streak."""
+        """Every 5 min, give streak to everyone currently in voice."""
         if not config.GLOBAL_SETTINGS["voice_stats"]:
             return
-        now = datetime.now().timestamp()
-        kyiv_today = database.get_kyiv_date()
         for uid in list(config.voice_start_times.keys()):
-            last_save = config.voice_last_save.get(uid, config.voice_start_times[uid])
-            # Calculate the Kyiv date when the last save happened
-            last_save_dt = datetime.fromtimestamp(last_save, tz=timezone.utc) + timedelta(hours=3)
-            last_save_date = last_save_dt.date().isoformat()
-            if last_save_date != kyiv_today:
-                # Midnight crossed! Save the accumulated time and update streak for the PREVIOUS day
-                duration = now - last_save
-                if duration > 0:
-                    database.add_voice_time_only(uid, duration, custom_today=last_save_date)
-                    config.voice_last_save[uid] = now
-                    database.save_voice_sessions()
+            database.update_streak(uid)
 
     @midnight_streak_check.before_loop
     async def before_midnight_check(self):
@@ -76,6 +64,7 @@ class EventsCog(commands.Cog):
         if not before.channel and after.channel:
             config.voice_start_times[member.id] = now
             config.voice_last_save[member.id] = now
+            database.update_streak(member.id)
             database.save_voice_sessions()
             print(f"JOIN: {member.name}")
 

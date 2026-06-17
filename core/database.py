@@ -98,17 +98,13 @@ def save_message_ids():
         os.replace(tmp_file, config.MSG_FILE)
     except Exception as e: print(f"ERROR save_message_ids: {e}")
 
-def update_streak(uid, custom_today=None):
+def update_streak(uid):
     s = load_stats()
-    today = custom_today or get_kyiv_date()
+    today = get_kyiv_date()
     entry = s.setdefault("streaks", {}).get(str(uid), {"last_date": None, "count": 0})
     if entry["last_date"] == today: 
         return
-    
-    # Calculate yesterday based on 'today'
-    today_dt = datetime.fromisoformat(today)
-    yest = (today_dt - timedelta(days=1)).date().isoformat()
-    
+    yest = (datetime.now(timezone.utc) + timedelta(hours=3) - timedelta(days=1)).date().isoformat()
     if entry["last_date"] == yest:
         entry["count"] += 1
     else:
@@ -155,7 +151,7 @@ def reset_fame_streak(uid):
         s["fame_streaks"][uid_str]["count"] = 0
         save_stats(s)
 
-def add_voice_time_only(member_id, duration, custom_today=None):
+def add_voice_time_only(member_id, duration):
     if duration <= 0: return
     s = load_stats()
     uid = str(member_id)
@@ -167,7 +163,6 @@ def add_voice_time_only(member_id, duration, custom_today=None):
     s["total"][uid] = current_total + duration
     s["daily"][uid] = current_daily + duration
     save_stats(s)
-    update_streak(uid, custom_today)
 
 def add_game_time_only(member_id, duration, game):
     if duration <= 0 or not game: return

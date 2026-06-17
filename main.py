@@ -154,14 +154,12 @@ async def on_ready():
                 now_ts = datetime.now().timestamp()
                 
                 if saved_time:
-                    # Bot was restarted while user was in voice
-                    # Save the unsaved time and update streak for the day they were active
                     unsaved_duration = now_ts - saved_time
                     if unsaved_duration > 0:
-                        # Determine which Kyiv date the saved_time belongs to
-                        saved_dt = datetime.fromtimestamp(saved_time, tz=timezone.utc) + timedelta(hours=3)
-                        saved_date = saved_dt.date().isoformat()
-                        database.add_voice_time_only(member.id, unsaved_duration, custom_today=saved_date)
+                        database.add_voice_time_only(member.id, unsaved_duration)
+                
+                # Give streak immediately — user is in voice right now
+                database.update_streak(member.id)
                 
                 config.voice_start_times[member.id] = now_ts
                 config.voice_last_save[member.id] = now_ts
