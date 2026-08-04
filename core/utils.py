@@ -112,45 +112,10 @@ async def play_tts(text, guild, bot):
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
             tmp_name = tmp.name
 
-        tts_done = False
-        eleven_key = os.environ.get("ELEVENLABS_API_KEY")
-        if eleven_key:
-            try:
-                import aiohttp
-                voice_id = "21m00Tcm4TlvDq8ikWAM"  # Rachel — приємний жіночий голос
-                url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
-                headers = {"xi-api-key": eleven_key, "Content-Type": "application/json"}
-                payload = {
-                    "text": text,
-                    "model_id": "eleven_multilingual_v2",
-                    "voice_settings": {"stability": 0.5, "similarity_boost": 0.75, "speed": 0.85}
-                }
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(url, json=payload, headers=headers) as resp:
-                        if resp.status == 200:
-                            with open(tmp_name, "wb") as f:
-                                f.write(await resp.read())
-                            tts_done = True
-                            print(f"🔊 TTS: файл збережено {tmp_name} (ElevenLabs)")
-                        else:
-                            err_text = await resp.text()
-                            print(f"⚠️ TTS: ElevenLabs повернув {resp.status}: {err_text[:300]}, використовую gTTS")
-                    
-                    # If TTS failed with 402, try to list available voices for debugging
-                    if not tts_done:
-                        async with session.get("https://api.elevenlabs.io/v1/voices", headers={"xi-api-key": eleven_key}) as vresp:
-                            if vresp.status == 200:
-                                vdata = await vresp.json()
-                                names = [f"{v.get('name')}={v.get('voice_id')}" for v in vdata.get("voices", [])[:10]]
-                                print(f"📋 Доступні голоси: {', '.join(names)}")
-            except Exception as e:
-                print(f"⚠️ TTS: ElevenLabs помилка ({e}), використовую gTTS")
-
-        if not tts_done:
-            from gtts import gTTS
-            tts = gTTS(text=text, lang='uk', slow=False)
-            tts.save(tmp_name)
-            print(f"🔊 TTS: файл збережено {tmp_name} (gTTS fallback)")
+        from gtts import gTTS
+        tts = gTTS(text=text, lang='uk', slow=False)
+        tts.save(tmp_name)
+        print(f"🔊 TTS: файл збережено {tmp_name} (Google Translate)")
 
         vc = discord.utils.get(bot.voice_clients, guild=guild)
         if not vc:
