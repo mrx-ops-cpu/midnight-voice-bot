@@ -133,7 +133,16 @@ async def play_tts(text, guild, bot):
                             tts_done = True
                             print(f"🔊 TTS: файл збережено {tmp_name} (ElevenLabs)")
                         else:
-                            print(f"⚠️ TTS: ElevenLabs повернув {resp.status}, використовую gTTS")
+                            err_text = await resp.text()
+                            print(f"⚠️ TTS: ElevenLabs повернув {resp.status}: {err_text[:300]}, використовую gTTS")
+                    
+                    # If TTS failed with 402, try to list available voices for debugging
+                    if not tts_done:
+                        async with session.get("https://api.elevenlabs.io/v1/voices", headers={"xi-api-key": eleven_key}) as vresp:
+                            if vresp.status == 200:
+                                vdata = await vresp.json()
+                                names = [f"{v.get('name')}={v.get('voice_id')}" for v in vdata.get("voices", [])[:10]]
+                                print(f"📋 Доступні голоси: {', '.join(names)}")
             except Exception as e:
                 print(f"⚠️ TTS: ElevenLabs помилка ({e}), використовую gTTS")
 
