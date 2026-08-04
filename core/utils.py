@@ -117,13 +117,13 @@ async def play_tts(text, guild, bot):
         if eleven_key:
             try:
                 import aiohttp
-                voice_id = "pNInz6obpgDQGcFmaJgB"  # Adam — multilingual
+                voice_id = "21m00Tcm4TlvDq8ikWAM"  # Rachel — приємний жіночий голос
                 url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
                 headers = {"xi-api-key": eleven_key, "Content-Type": "application/json"}
                 payload = {
                     "text": text,
                     "model_id": "eleven_multilingual_v2",
-                    "voice_settings": {"stability": 0.5, "similarity_boost": 0.75}
+                    "voice_settings": {"stability": 0.5, "similarity_boost": 0.75, "speed": 0.85}
                 }
                 async with aiohttp.ClientSession() as session:
                     async with session.post(url, json=payload, headers=headers) as resp:
