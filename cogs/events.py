@@ -50,11 +50,19 @@ class EventsCog(commands.Cog):
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
 
-        if member.id == self.bot.user.id and before.channel and not after.channel:
-            if config.GLOBAL_SETTINGS["voice_guard"]:
-                await asyncio.sleep(5)
-                await utils.join_voice_safe(self.bot)
-            return
+        if member.id == self.bot.user.id:
+            if before.channel and not after.channel:
+                # Bot was kicked from voice
+                if config.GLOBAL_SETTINGS["voice_guard"]:
+                    await asyncio.sleep(5)
+                    await utils.join_voice_safe(self.bot)
+                return
+            elif before.channel and after.channel and before.channel != after.channel:
+                # Bot was moved to another channel
+                if config.GLOBAL_SETTINGS["voice_guard"]:
+                    await asyncio.sleep(2)
+                    await utils.join_voice_safe(self.bot)
+                return
 
         if member.bot or not config.GLOBAL_SETTINGS["voice_stats"]: 
             return
