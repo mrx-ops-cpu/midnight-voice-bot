@@ -8,7 +8,7 @@ import tempfile
 import hashlib
 import json
 from datetime import datetime, timezone
-import edge_tts
+
 
 from core import config, database
 
@@ -112,10 +112,36 @@ async def play_tts(text, guild, bot):
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
             tmp_name = tmp.name
 
-        from gtts import gTTS
-        tts = gTTS(text=text, lang='uk', slow=False)
-        tts.save(tmp_name)
-        print(f"🔊 TTS: файл збережено {tmp_name} (Google Translate)")
+        tts_done = False
+        eleven_key = os.environ.get("ELEVENLABS_API_KEY")
+        if eleven_key:
+            try:
+                import aiohttp
+                voice_id = "pNInz6obpgDQGcFmaJgB"  # Adam — multilingual
+                url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+                headers = {"xi-api-key": eleven_key, "Content-Type": "application/json"}
+                payload = {
+                    "text": text,
+                    "model_id": "eleven_multilingual_v2",
+                    "voice_settings": {"stability": 0.5, "similarity_boost": 0.75}
+                }
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(url, json=payload, headers=headers) as resp:
+                        if resp.status == 200:
+                            with open(tmp_name, "wb") as f:
+                                f.write(await resp.read())
+                            tts_done = True
+                            print(f"🔊 TTS: файл збережено {tmp_name} (ElevenLabs)")
+                        else:
+                            print(f"⚠️ TTS: ElevenLabs повернув {resp.status}, використовую gTTS")
+            except Exception as e:
+                print(f"⚠️ TTS: ElevenLabs помилка ({e}), використовую gTTS")
+
+        if not tts_done:
+            from gtts import gTTS
+            tts = gTTS(text=text, lang='uk', slow=False)
+            tts.save(tmp_name)
+            print(f"🔊 TTS: файл збережено {tmp_name} (gTTS fallback)")
 
         vc = discord.utils.get(bot.voice_clients, guild=guild)
         if not vc:
